@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
 
 
-    plt.show()
+    # plt.show()
 
 
     df.to_csv('DELIVER_CS5525_term_dataset_cliffordt_Deflation_EcoEnv_Nov2022_Jan2023.csv')
