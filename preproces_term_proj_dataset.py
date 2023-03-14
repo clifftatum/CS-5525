@@ -45,12 +45,9 @@ if __name__ == '__main__':
     severe_loss = (loss_range - 0) * (bin_factor * 4)
 
     def change(x):
-
         significant_gain =500
         moderate_gain = 100
-
         origin = 0
-
         moderate_loss = -10
         significant_loss = -50
 
@@ -70,7 +67,28 @@ if __name__ == '__main__':
 
 
     df['target_signal_performance'] = df['price_pct_change'].apply(change)
-
+    df['target_buy_sell_performance'] = None
+    i=-1
+    for index, row in df.iterrows():
+        i+=1
+        if row['SSCrossover'] == 'Y' and row['target_signal_performance'] == 'moderate_gain':
+            df['target_buy_sell_performance'][i] = 'good_buy'
+        elif row['SSCrossover'] == 'Y' and row['target_signal_performance'] == 'significant_gain':
+            df['target_buy_sell_performance'][i] = 'great_buy'
+        elif row['SSCrossover'] == 'S' and row['target_signal_performance'] == 'moderate_gain':
+            df['target_buy_sell_performance'][i] = 'good_sell'
+        elif row['SSCrossover'] == 'S' and row['target_signal_performance'] == 'significant_gain':
+            df['target_buy_sell_performance'][i] = 'great_sell'
+        elif row['SSCrossover'] == 'Y' and row['target_signal_performance'] == 'moderate_loss':
+            df['target_buy_sell_performance'][i] = 'poor_buy'
+        elif row['SSCrossover'] == 'Y' and row['target_signal_performance'] == 'significant_loss':
+            df['target_buy_sell_performance'][i] = 'horrible_buy'
+        elif row['SSCrossover'] == 'S' and row['target_signal_performance'] == 'moderate_loss':
+            df['target_buy_sell_performance'][i] = 'poor_sell'
+        elif row['SSCrossover'] == 'S' and row['target_signal_performance'] == 'significant_loss':
+            df['target_buy_sell_performance'][i] = 'horrible_sell'
+        else:
+            df['target_buy_sell_performance'][i] = 'Hold'
 
 
     # df_official['price_pct_change'].fillna(0)
@@ -78,14 +96,15 @@ if __name__ == '__main__':
     df.drop(['DateTime'],axis=1,inplace=True)
     df.drop(['Unnamed: 0'], axis=1,inplace=True)
 
-    df['target_signal_performance'].value_counts().plot()
+    df['target_buy_sell_performance'].value_counts().plot()
 
 
 
 
 
-    # plt.show()
+
 
 
     df.to_csv('DELIVER_CS5525_term_dataset_cliffordt_Deflation_EcoEnv_Nov2022_Jan2023.csv')
 
+    plt.show()
