@@ -20,7 +20,7 @@ pd.options.display.float_format = "{:,.2f}".format
 
 if __name__ == '__main__':
     eda = EDA('Clifford Tatum Term Project - DATASET PREPROCESSING - CS-5525')
-    url = 'deflation_market-dataset_2023_cliffordt_CS5525_term_dataset.csv'
+    url = 'C:\\Users\\cft5385\\Documents\\Learning\\CS-5525\\pythonProject\\deflation_market-dataset_2023_cliffordt_CS5525_term_dataset.csv'
     df = pd.read_csv(url)
 
 
@@ -45,33 +45,25 @@ if __name__ == '__main__':
     severe_loss = (loss_range - 0) * (bin_factor * 4)
 
     def change(x):
-        excellent_gain = 337.56
-        significant_gain =253.17
-        moderate_gain = 168.78
-        minimal_gain = 84.39
+
+        significant_gain =500
+        moderate_gain = 100
+
         origin = 0
-        minimal_loss = -13.06
-        moderate_loss =-26.13
-        significant_loss =-39.16
-        severe_loss =-52.26
+
+        moderate_loss = -10
+        significant_loss = -50
 
 
-        if x> origin and x < minimal_gain:
-            return 'minimal_gain'
-        elif x > minimal_gain and x < moderate_gain:
+
+        if x> origin and x < moderate_gain:
             return 'moderate_gain'
-        elif x > moderate_gain and x < significant_gain:
+        elif x > moderate_gain :
             return 'significant_gain'
-        elif x > significant_gain and x <= excellent_gain:
-            return 'excellent_gain'
-        elif x < origin and x > minimal_loss:
-            return 'minimal_loss'
-        elif x < minimal_loss and x > moderate_loss:
+        elif x < origin and x > moderate_loss:
             return 'moderate_loss'
-        elif x < moderate_loss and x > significant_loss:
+        elif x < moderate_loss:
             return 'significant_loss'
-        elif x < significant_loss and x >= severe_loss:
-            return 'severe_loss'
         else:
             return 'Hold'
 
@@ -89,52 +81,9 @@ if __name__ == '__main__':
     df['target_signal_performance'].value_counts().plot()
 
 
-    df_exel_g = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['excellent_gain'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-
-    df_sig_g = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['significant_gain'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-    df_mod_g = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['moderate_gain'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-    df_min_g = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['minimal_gain'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-
-    df_severe_l = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['severe_loss'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-
-    df_sig_l = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['significant_loss'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-    df_mod_l = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['moderate_loss'],
-                                      obs_by_feature= ['target_signal_performance'])
-
-    df_min_l = eda.slice_by_observation(df,
-                                      feature=['price_pct_change','target_signal_performance'],
-                                      observations=['minimal_loss'],
-                                      obs_by_feature= ['target_signal_performance'])
 
 
 
-    plt.ylim([0,100])
     plt.show()
 
 

@@ -10,9 +10,11 @@ pd.set_option("display.precision", 2)
 pd.options.display.float_format = "{:,.2f}".format
 
 #######################################################################################################################
-# This scrips takes a CSV of N number of various publicly trade-able symbol observations along with various stochastic
-# features and evalutes the performance of the BUY or SELL signal against a single stochastic cycle's worth of fiscal
-# performance - this metric is then categorized to a target feature in another script
+# The dataset is compiled of various publicly traded stocks, commodities, and fixed income symbol observations, selected
+# based upon the macro-economic environment for the given time interval: deflation (Nov 2022 - Jan 2023).
+# Many of the features are related to stochastic signals which inform a given
+# observation as to its current and future probable behavior. The target for the dataset is the price change (%) over
+# one stochastic cycle from the date of the buy/sell signal.
 #######################################################################################################################
 
 
