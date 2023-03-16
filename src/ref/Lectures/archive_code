@@ -1,0 +1,86 @@
+
+    x = [1,2,3,40,50,1e-5]
+    y = np.array(x)
+
+    print(f'Arithmetic mean: {np.mean(y):.6f}')
+    print(f'Harmonic mean: {hmean(y):.6f}')
+    print(f'Geometric mean: {gmean(y):.6f}')
+
+    # Create confusion matrix for some data
+    np.random.seed(5525) # ALWAYS this seed
+    actual = np.random.binomial(1,0.9,size = 1000)
+    predicted = np.random.binomial(1, 0.9, size=1000)
+
+    confusion_matrix = metrics.confusion_matrix(actual,predicted)
+    print(confusion_matrix)
+
+    cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix=confusion_matrix,
+                                                display_labels = [False,True])
+    plt.show()
+
+    Accuracy = metrics.accuracy_score(actual,predicted)
+    Precision = metrics.precision_score(actual, predicted)
+    Sensitivity_recall = metrics.recall_score(actual, predicted)
+    Specificity = metrics.recall_score(actual, predicted,pos_label=0)
+    F1_Score = metrics.f1_score(actual, predicted)
+
+    print(f'Accuracy: {100*Accuracy:.6f}%')
+    print(f'Precision: {100*Precision:.6f}%')
+    print(f'Sensitivity: {100*Sensitivity_recall:.6f}%')
+    print(f'Specificity: {100*Specificity:.6f}%')
+    print(f'F1_Score: {F1_Score:.6f}')
+
+    # yahoo app with python - ask the proffesor (stock trading)
+    # install SciView - nice way to view data on the left
+
+    name = sns.get_dataset_names()
+    df = sns.load_dataset('titanic')
+
+    print(df.isna().sum())
+    df['deck'].fillna(df['deck'].mode()[0],inplace=True)
+    print(df.isna().sum())
+
+    # Create dummy data set( for HW)
+
+    # x1,y1 = make_regression(n_samples=1000,
+    #                         n_features=2,
+    #                         n_informative=2,
+    #                         n_targets=1,
+    #                         bias =0,
+    #                         random_state=5525)# must be fixed to 5525
+
+    # x1,y1 = make_classification(n_samples=1000,
+    #                         n_features=2,
+    #                         n_informative=2,
+    #                         n_redundant=0,
+    #                         n_repeated =0,
+    #                         n_classes=2,
+    #                         random_state=5525)# must be fixed to 5525
+
+
+    x1,y1 = make_blobs(n_samples=1000,
+                            centers=4,
+                            n_features=2,
+                            random_state=5525)# must be fixed to 5525
+
+    # create a DataFrame
+    X1 = pd.DataFrame(x1,columns=['feature 1','feature 2'])
+    Y1 = pd.DataFrame(y1, columns=['target'])
+    print(X1.head())
+    print(Y1.head())
+
+    df = pd.concat([X1,Y1],axis = 1)
+    print(df.head())
+    plt.plot(df['feature 1'].values,
+             df['target'].values,
+             'o',c='lime',markeredgewidth = 0.5,
+             markeredgecolor = 'black')
+    # regression
+    # plt.axis('equal')
+    # plt.show()
+
+    # classification
+    sns.scatterplot(data = df,x = 'feature 1',y='feature 2',hue = 'target')
+    plt.grid()
+    plt.title('The isotropic gaussian blob with 4 centers and 2 features')
+    plt.show()
