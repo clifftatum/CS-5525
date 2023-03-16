@@ -77,7 +77,7 @@ class EDA:
                 num_feat_names.append(fn)
         return df[num_feat_names]
 
-    def show_agg_by_feature(self,df,name=None,printF=None,saveF=None):
+    def show_agg_by_feature(self,df):
         feat_names = list(df.columns)
         buffer = [None] * 10
         for fn in feat_names:

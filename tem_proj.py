@@ -22,10 +22,19 @@ if __name__ == '__main__':
 
     # Prune the useless Features
     df.drop(columns='Unnamed: 0',inplace=True)
-
     num_missing, percent_removed, df_clean = eda.get_percent_of_missing_observations(df,clean=True,
                                                                                         show=True,
                                                                                         clean_method='prune')
+    # Aggregration
+    df_agg = eda.show_agg_by_feature(df_clean)
+
+    pass
+
+
+
+
+
+
 
 
     # fig = px.scatter(df, x="SlowPctK", y="PctB", color="target_buy_sell_performance", marginal_y="violin",
@@ -34,4 +43,4 @@ if __name__ == '__main__':
 
     # df.drop(['price_pct_change'],axis1,inplace=True)
 
-    pass
+
