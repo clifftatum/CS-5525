@@ -25,7 +25,7 @@ if __name__ == '__main__':
     num_missing, percent_removed, df_clean = eda.get_percent_of_missing_observations(df,clean=True,
                                                                                         show=True,
                                                                                         clean_method='prune')
-    # Aggregration
+    # Aggregation
     df_agg = eda.show_agg_by_feature(df_clean)
 
     pass
