@@ -27,7 +27,6 @@ if __name__ == '__main__':
     num_missing, percent_removed, df_clean = eda.get_percent_of_missing_observations(df,clean=True,
                                                                                         show=True,
                                                                                         clean_method='prune')
-<<<<<<< HEAD
     df = df_clean
 
     # Aggregation
@@ -80,11 +79,8 @@ if __name__ == '__main__':
 
 
     # eda.plot_features_unified_xaxis(df_agg,x_axis_feature=['Date'])
-=======
     # Aggregation
     df_agg = eda.show_agg_by_feature(df_clean)
->>>>>>> 2acfa58563a4a24c6b7330f47037e553720f926f
-
     pass
 
 

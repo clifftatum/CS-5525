@@ -1,6 +1,6 @@
 import pandas as pd
 from matplotlib import pyplot as plt
-from EDA import EDA
+from src.EDA import EDA
 import seaborn as sb
 import numpy as np
 
