@@ -56,15 +56,15 @@ model = RandomForestRegressor(random_state=1,
                               max_depth=100,
                               n_estimators=100)
 
-# model.fit(X,y)
-# features = df.columns
-# importance = model.feature_importances_
-# indices = np.argsort(importance)[-20:]
-# plt.barh(range(len(indices)), importance[indices], color='b',align='center')
-# plt.yticks(range(len(indices)), [features[i] for i in indices])
-# plt.xlabel('Relative Importance')
-# plt.tight_layout()
-# plt.show()
+model.fit(X,y)
+features = df.columns
+importance = model.feature_importances_
+indices = np.argsort(importance)[-20:]
+plt.barh(range(len(indices)), importance[indices], color='b',align='center')
+plt.yticks(range(len(indices)), [features[i] for i in indices])
+plt.xlabel('Relative Importance')
+plt.tight_layout()
+plt.show()
 # age = [10,11,13,32,34,40,72,73,75]
 # df = pd.DataFrame(np.array(age), columns=['age'])
 # print(df)

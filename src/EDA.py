@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-pd.set_option("display.precision", 2)
 import seaborn as sns
 from scipy.stats import gmean
 from scipy.stats import hmean
@@ -12,8 +11,12 @@ from matplotlib import pyplot as plt
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
 from prettytable import PrettyTable
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from sklearn.ensemble import RandomForestRegressor
 
-
+pd.set_option("display.precision", 2)
 
 
 
@@ -77,7 +80,7 @@ class EDA:
                 num_feat_names.append(fn)
         return df[num_feat_names]
 
-    def show_agg_by_feature(self,df):
+    def get_aggregate(self,df):
         feat_names = list(df.columns)
         buffer = [None] * 10
         for fn in feat_names:
@@ -104,6 +107,52 @@ class EDA:
 
         return df_processed
 
+    def show_aggregate(self,df,df_agg,plot_type,title):
+        if plot_type == 'plotly':
+
+            # Create the figure
+            fig = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.03,
+                specs=[[{"type": "table"}],
+                       [{"type": "xy"}]]
+            )
+
+            # add the Aggregate Table
+            fig.add_trace(
+                go.Table(
+                    header=dict(
+                        values=df_agg.columns,
+                        font=dict(size=10),
+                        align="left"
+                    ),
+                    cells=dict(
+                        values=[df_agg[k].tolist() for k in df_agg.columns],
+                        align="left")
+                ),
+                row=1, col=1
+            )
+
+            df_numeric= self.get_numerical_features(df)
+            for i,feat in enumerate(df_numeric.columns):
+                fig.add_trace(go.Violin(y=df_numeric[feat],
+                                        box_visible=True,
+                                        meanline_visible=True,
+                                        name=feat),
+                                        row=2, col=1)
+            fig.update_yaxes(type="log", row=2, col=1)
+
+
+
+            fig.update_layout(
+                showlegend=True,
+                title_text=title,
+            )
+            return fig
+
+
+
 
     def get_percent_of_missing_observations(self,df,clean, show,clean_method):
         df_cleaned = None
@@ -122,6 +171,9 @@ class EDA:
                 dirty_feats = str(df.columns[df.isna().any()][0])
                 df = df.drop(columns = dirty_feats)
                 df_cleaned = df
+            elif clean_method == 'zeros':
+                df_cleaned = df.fillna(0)
+
 
 
                 if show:
@@ -257,25 +309,24 @@ class EDA:
         X_PCA = pca.transform(df)
         return X_PCA
 
-    def plot_features_unified_xaxis(self,df,x_axis_feature,y_axis_feature,observation_ID,show_plot,title):
+    def plot_features_unified_xaxis(self,df,x_axis_feature,y_axis_feature,observation_ID,plot_type,title):
         plt.figure(figsize=(12, 8))
         legFlag = True
         for obs in observation_ID:
             for i,yy in enumerate(y_axis_feature):
-                x = df[df['symbol'] == obs][x_axis_feature]
-                y = df[df['symbol'] == obs][y_axis_feature]
-                if y.isnull().values.any():
-                    data = df.dropna()
-                    x = data[data['symbol'] == obs][x_axis_feature]
-                    y = data[data['symbol'] == obs][y_axis_feature]
-                if title == 'Google stock price and moving average' and i==1:
-                    plt.plot(x, y, label=yy)
-                elif title == 'Google stock price and moving average':
-                    if legFlag:
-                        plt.plot(x,y, label = obs)
-                        legFlag=False
-                else:
+                # x = df[df['Symbol'] == obs][x_axis_feature]
+                # y = df[df['Symbol'] == obs][y_axis_feature]
+
+                # if y.isnull().values.any():
+                data = df.dropna()
+                x = data[data['Symbol'] == obs][x_axis_feature]
+                y = data[data['Symbol'] == obs][y_axis_feature]
+                if plot_type == 'matplotlib':
                     plt.plot(x, y, label=obs)
+                    fig = plt.gcf()
+                elif plot_type == 'plotly':
+                    fig = px.plot(x, y, label=obs)
+
         n_samples = len(x)
         plt.xlabel(x_axis_feature, weight='bold', size=12)
         plt.ylabel(y_axis_feature, weight='bold', size=12)
@@ -311,14 +362,6 @@ class EDA:
         df_send = df_temp.iloc[:,1:]
         df_send_trunc = df_send.dropna()
         return df_send_trunc
-        # else:
-        #     for i,obs in enumerate(observations):
-        #         if i != len(observations)-1:
-        #             cmmd_str = cmmd_str + '(df['"'" + feature + "'"'] == '"'"+ obs +"'" ') | '
-        #         else:
-        #             cmmd_str = cmmd_str + '(df['"'" + feature + "'"'] == ' "'"+ obs +"'" ')'
-
-        # return eval('df['+ cmmd_str +']')
 
     def compute_skewness(self,data, order):
         N = len(data)
@@ -382,6 +425,49 @@ class EDA:
             diff.append(value)
             return np.array(diff).reshape(len(diff),1)
 
+    def show_random_forest_analysis(self,X,y,rank_list,plot_type,title):
+
+        model = RandomForestRegressor(random_state=1,
+                                      max_depth=5,
+                                      n_estimators=100)
+
+        if self.get_num_categorical_features(y) ==1:
+            y['rank'] = None
+            for index, row in y.iterrows():
+                y['rank'][index] = rank_list.index(row['target_buy_sell_performance'])
+
+
+        model.fit(X, y['rank'])
+
+
+        features = X.columns
+        importance = model.feature_importances_
+        indices = np.argsort(importance)[-len(importance):]  # top 20
+
+        if plot_type == 'matplotlib':
+            plt.barh(range(len(indices)), importance[indices], color='b', align='center')
+            plt.yticks(range(len(indices)), [features[i] for i in indices])
+            plt.xlabel('Relative Importance')
+            plt.tight_layout()
+            fig = plt.gcf()
+        elif plot_type == 'plotly':
+            fig = px.bar(range(len(indices)), importance[indices], orientation='h')
+
+            fig.update_layout(xaxis_title="Relative Importance",
+                              yaxis=dict(
+                                  tickvals=np.arange(0,len(indices)),
+                                  ticktext=[features[i] for i in indices]),
+                              showlegend = True,
+                              title_text = title,
+                              )
+            # ticktext = [range(len(indices)), [features[i] for i in indices]]
+            # for idx in range(len(fig.data)):
+            #     fig.data[idx].y = ticktext[idx]
+
+
+
+
+            return fig
 
 
 

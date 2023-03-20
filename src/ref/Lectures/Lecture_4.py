@@ -2,7 +2,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 pd.set_option("display.precision", 2)
-from EDA import EDA
+from src.EDA import EDA
 import seaborn as sb
 sb.set(color_codes=True)
 import numpy as np
@@ -119,12 +119,21 @@ if __name__ == '__main__':
     features = df.columns
     importance = model.feature_importances_
     indices = np.argsort(importance)[-20:]# top 20
-    # plt.yticks((range(len(indices))))
 
+    plt.barh(range(len(indices)), importance[indices], color='b', align='center')
+    plt.yticks(range(len(indices)), [features[i] for i in indices])
 
-    # Lab 2
-    df = pd.read_csv('stock prices.csv')
-    pass
+    # ticktext = [range(len(indices)), [features[i] for i in indices]]
+    # for idx in range(len(fig.data)):
+    #     fig.data[idx].y = ticktext[idx]
+
+    plt.xlabel('Relative Importance')
+    plt.tight_layout()
+    plt.show()
+
+    # # Lab 2
+    # df = pd.read_csv('stock prices.csv')
+    # pass
 
 
 

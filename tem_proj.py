@@ -4,6 +4,8 @@ from src.EDA import EDA
 import seaborn as sb
 import plotly.express as px
 import numpy as np
+np.random.seed(5525)
+import sklearn
 
 sb.set(color_codes=True)
 pd.set_option("display.precision", 2)
@@ -25,8 +27,58 @@ if __name__ == '__main__':
     num_missing, percent_removed, df_clean = eda.get_percent_of_missing_observations(df,clean=True,
                                                                                         show=True,
                                                                                         clean_method='prune')
-    # Aggregration
-    df_agg = eda.show_agg_by_feature(df_clean)
+    df = df_clean
+
+    # Aggregation
+    df_agg = eda.get_aggregate(df)
+    fig = eda.show_aggregate(df,df_agg,plot_type = 'plotly',title = ' Aggregate analysis:  Deflation Market Nov 2022 - Jan 2023')
+
+
+
+    # Dimensionality reduction / feature selection:
+    # Random forest
+
+    # One hot encode
+    # label_binarizer = sklearn.preprocessing.LabelBinarizer()
+    # X = df.drop(columns='Date')
+    # X = label_binarizer.fit_transform(X)
+
+    fig = eda.show_random_forest_analysis(X=eda.get_numerical_features(df),
+                                          y=eda.slice_by_observation(df, ['target_buy_sell_performance'],
+                                                                     observations=None, obs_by_feature=None),
+                                          rank_list=['great_buy', 'great_sell', 'good_buy', 'good_sell', 'Hold',
+                                                     'poor_sell', 'poor_buy', 'horrible_sell', 'horrible_buy'],
+                                          plot_type='plotly',
+                                          title = ' Random Forest Analysis:  Deflation Market Nov 2022 - Jan 2023')
+
+
+    fig.show()
+
+
+    # model.fit(X,y)
+    # features = df.columns
+    # importance = model.feature_importances_
+    # indices = np.argsort(importance)[-20:]
+    # plt.barh(range(len(indices)), importance[indices], color='b',align='center')
+    # plt.yticks(range(len(indices)), [features[i] for i in indices])
+    # plt.xlabel('Relative Importance')
+    # plt.tight_layout()
+    # plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # eda.plot_features_unified_xaxis(df_agg,x_axis_feature=['Date'])
 
     pass
 

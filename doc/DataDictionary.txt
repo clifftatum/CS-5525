@@ -1,0 +1,54 @@
+Symbol - Symbol
+SectorIndustry - Sector and Industry
+Sector - Sector
+Industry - Industry Within Sector
+StockType - Asset Class\Equity Type
+ E - ETF
+ U - Currency
+ F - Fixed Income
+ M - Commodity
+ S - Stock
+ I - Index
+21PdMo - 21 Period Moving Average
+63PdMo - 62 Period Moving Average
+SlowPctK - Slow Stochastic Percent K
+SlowPctD - Slow Stochastic Percent D
+BWPercentile - (See Legend.txt on github)
+PctB - Bollinger PercentB - Relationship of closing price to upper and lower band.
+    (Close-LowerBand)/UpperBane-LowerBane)
+SSCrossover - (See Legend.txt on github)
+SSFailure - (See Legend.txt on github)
+SSEmbedded - (See Legend.txt on github)
+MFI - Money Flow Index
+IsFavorite - System specific
+IsActive - System specific
+Sequence - System specific
+SectorIndustryID - System specific
+DatesID - System specific
+StockID - System specific
+PriceDate - Date of price\volume data
+Open - Opening Price
+Price - Closing Price
+Low - Low
+High - High
+LowerBollinger - Lower Bollinger Band
+UpperBollinger - Upper Bollinger Band
+MovingAverage - Middle Bollinger Band (20 day moving average)
+Volume - Number of shares traded
+BandWidth - A comparitve measure of the distance between upper and lower Bollinger bands
+RSI - Relative Strength Index
+VolumeTenMA - Ten day moving average of volume
+
+*************************************************************
+The 3 SS (Slow Stochastic) signals trigger on SlowPctD and SlowPctK values.
+
+The theory is that once both values remain over 80 or below 20 for 3 consecutive days that name is no longer oversold\overbought.  It will press upward (over 80) or downward (below 20) until one line breaches the 80\20 range.
+
+Once the breach occurs the price will move to the 20 day moving average.
+
+Once it is in these extreme ranges a crossover will preced the 80\20 breach.
+
+
+SSCrossover - (See Legend.txt on github)
+SSFailure - (See Legend.txt on github)
+SSEmbedded - (See Legend.txt on github)
