@@ -4,7 +4,7 @@ import seaborn as sns
 from scipy.stats import gmean
 from scipy.stats import hmean
 from scipy.spatial import distance
-from sklearn import metrics
+from sklearn import metrics, preprocessing
 from sklearn.datasets import make_regression,make_classification,make_blobs
 import sklearn
 from matplotlib import pyplot as plt
@@ -15,8 +15,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sklearn.ensemble import RandomForestRegressor
-
-pd.set_option("display.precision", 2)
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
+import statsmodels.api as sm
+np.random.seed(5525)
+pd.set_option("display.precision", 3)
 
 
 
@@ -221,7 +224,7 @@ class EDA:
     def standardize(self,df):
         df_init = self.get_numerical_features(df)
         feat_names = list(df_init.columns)
-        df_stand_columns = [f'{df_init.columns[i]} (standardized)' for i in range(0, df_init.shape[1])]
+        df_stand_columns = [f'{df_init.columns[i]}' for i in range(0, df_init.shape[1])]
         x_stand_mat = np.zeros((df_init.shape[0],df_init.shape[1]))
         for i,fn in enumerate(feat_names):
             x = df_init[fn]
@@ -375,8 +378,16 @@ class EDA:
             if head is None:
                 headers = dat.columns
         else:
-            data = np.round(dat, 2)
-            headers = list(head)
+            try:
+                data = np.round(dat, 2)
+                headers = list(head)
+            except:
+                data=dat
+                headers = ''
+
+
+
+
 
         x = PrettyTable(data.dtype.names)
         for row in data:
@@ -464,16 +475,136 @@ class EDA:
             # for idx in range(len(fig.data)):
             #     fig.data[idx].y = ticktext[idx]
 
-
-
-
             return fig
 
+    def show_hbar(self,df,x_feat,y_feat,by_leg_category):
+        fig = px.bar(df, x=x_feat, y=y_feat, color=by_leg_category, orientation='h')
+
+        fig.update_layout(xaxis_title=x_feat, yaxis_title=y_feat,
+                          title_text=x_feat + ' by ' +y_feat,
+                          )
+        fig.update_layout(
+            plot_bgcolor='white'
+        )
+        fig.update_xaxes(
+            mirror=False,
+            ticks='outside',
+            showline=True,
+            linecolor='black',
+            gridcolor='lightgrey'
+        )
+        fig.update_yaxes(
+            mirror=True,
+            ticks='outside',
+            showline=True,
+            linecolor='black',
+            gridcolor='lightgrey'
+        )
+
+        fig.update_xaxes(showgrid=True)
+        fig.update_yaxes(showgrid=False)
+
+
+        return fig
+
+    def one_hot_encode(self,df):
+        init_len = len(df.columns)
+        ind_to_standardize = []
+        encoder = OneHotEncoder(handle_unknown='ignore')
+        df_quant_feat = self.get_numerical_features(df).columns
+        df_all = df.columns
+        df_qual_feat = [ele for ele in df_all if ele not in df_quant_feat]
+        final_df = df
+        count_new_columns = 0
+
+        for qf in df_qual_feat:
+
+            #perform one-hot encoding on each qualitative column
+            encoder_df = pd.DataFrame(encoder.fit_transform(df[[qf]]).toarray())
+
+            #merge one-hot encoded columns back with original DataFrame
+            final_df_temp = df.join(encoder_df)
+            map = []
+            for i in range(0,len(encoder_df.columns)):
+                count_new_columns+=1
+                name_temp = final_df_temp[qf][encoder_df[encoder_df.iloc[:,i] == 1].index].unique()
+                final_df[name_temp[0]+'_'+qf] = encoder_df.iloc[:,i]
+
+            # final_df.drop(final_df_temp[encoder_df.columns], axis=1, inplace=True)
+
+            final_df.drop(qf, axis=1, inplace=True)
+        ind_to_standardize = np.arange(len(final_df.columns)-(count_new_columns),len(final_df.columns)-(count_new_columns)+count_new_columns)
+        return final_df,ind_to_standardize
+
+    def split_80_20(self,df,target):
+        y = pd.DataFrame(df[target],columns=[target])
+        df.drop(columns = target, inplace=True)
+        # df_stand = self.standardize(df)
 
 
 
+        x_train,x_test,y_train,y_test=train_test_split(df,y,
+                                                       test_size=0.2,
+                                                       random_state=1,
+                                                       shuffle=True)
+        return x_train,x_test,y_train,y_test
+
+    def backward_linear_regression(self,x_train,y_train,show):
+        x_train_init = x_train.copy(deep=True)
+        Rsqs = {}
+        adjRsqr = {}
+        models = {}
+        dropped_feats = []
+        d_adjusted_R_squared_by_d_dropped = None
+        best_model = None
+        for i,feat in enumerate(x_train):
+            if i==0:
+                msg_str = 'full feature space'
+                prev_adj_R_squared = None
+            else:
+                prev_adj_R_squared = model.rsquared_adj
 
 
+            # Compute the linear regression
+            model = sm.OLS(y_train, x_train).fit()
+
+            # Measure the model, the R_squared and the Adjusted R squared, the feature with the max p-value
+            Rsqs.update({msg_str:model.rsquared})
+            adjRsqr.update({msg_str: model.rsquared_adj})
+
+            # Track the change in adj Rsq by pruned features
+            if i>0:
+                d_adjusted_R_squared_by_d_dropped = (model.rsquared_adj-prev_adj_R_squared)/1
+                if d_adjusted_R_squared_by_d_dropped<0: # if the adj R squared is negative the removal of this
+                    # feature does NOT improve the explained variance of the linear regression
+                    # return previous model
+                    best_model = models[prev_msg_str]
+                    dropped_feats.pop()
+                    break
+
+            models.update({msg_str: model})
+            max_p_ind = np.argmax(model.pvalues)
+            if np.max(model.pvalues)<=0.05: # if the max p-value is below the acceptable threshold , break
+                break
+            # Drop the feature with the highest p value
+            dropped_feats.append(x_train.columns[max_p_ind])
+            prev_msg_str = msg_str
+            msg_str = 'Dropped: ' + str(dropped_feats)
+            x_train.drop(columns=x_train.columns[max_p_ind], inplace=True)
 
 
+        # Drop the features
+        x_train_init.drop(columns =dropped_feats,inplace = True )
+        if show:
+            # Show the dropped features
+            # self.to_pretty_table(dat = dropped_feats,title='Dropped Features:',head='None')
+            print(f'Dropped Features: {dropped_feats}')
+
+            # Show the kept features
+            # self.to_pretty_table(dat = x_train_init.columns,title='Kept Features:',head='None')
+            print(f'Kept Features: {x_train_init.columns}')
+
+            # Show the best model summary
+            print(f'Best Model Summary: {best_model.summary()}')
+        return x_train_init
 
