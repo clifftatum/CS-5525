@@ -678,7 +678,8 @@ class EDA:
                 x_test[Y.columns[0]] = Y
                 x_test['n_observations'] = np.arange(1, len(x_test) + 1).reshape(len(x_test), 1)
                 x_test['OLS_predicted_'+Y.columns[0]] = np.array(y_hat).reshape(len(y_hat),1)
-                fig = px.line(x_test, x_test['n_observations'] , y=[Y.columns[0],'OLS_predicted_'+Y.columns[0]])
+                x_test['Predicted ' + Y.columns[0]] = np.array(y_hat).reshape(len(y_hat), 1)
+                fig = px.line(x_test, x_test['n_observations'] , y=[Y.columns[0],'Predicted ' + Y.columns[0]])
 
                 fig.update_layout(plot_bgcolor='white')
                 fig.update_xaxes(mirror=False,ticks='outside',showline=True,linecolor='black',gridcolor='lightgrey')
@@ -694,10 +695,11 @@ class EDA:
 
         return y_hat_model, x_test, fig
 
-    def drop_and_show_OLS_prediction(self,x_train,y_train,x_test,y_test,dropped_feats,show,compute_prediction,
+    def drop_and_show_OLS_prediction(self,x_train,y_train,x_test,y_test,dropped_feats,show,title,compute_prediction,
                                      compute_method,dim_red_method):
         # Drop the features
-        x_train.drop(columns=dropped_feats,axis=1, inplace=True)
+        if dropped_feats is not None:
+            x_train.drop(columns=dropped_feats,axis=1, inplace=True)
         # Compute the linear regression
         model = sm.OLS(y_train, x_train).fit()
         fig = None
@@ -707,7 +709,8 @@ class EDA:
                 # Compute a prediction on the test data set
                 # Using Package
                 Y = y_test
-                x_test = x_test.drop(columns=dropped_feats)
+                if dropped_feats is not None:
+                    x_test = x_test.drop(columns=dropped_feats)
                 X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
                 y_hat_model = sm.OLS(Y, X).fit()
                 y_hat = y_hat_model.predict()
@@ -715,7 +718,8 @@ class EDA:
                 SSE = e.T @ e
                 MSE = mean_squared_error(np.array(Y), np.array(y_hat.reshape(len(y_hat), 1)))
             elif compute_prediction and compute_method is 'manual':
-                x_test = x_test.drop(columns =dropped_feats)
+                if dropped_feats is not None:
+                    x_test = x_test.drop(columns =dropped_feats)
                 X = np.hstack((np.ones(len(x_test)).reshape(len(x_test),1),x_test))
                 Y = y_test
                 H = X.T @ X
@@ -727,19 +731,27 @@ class EDA:
             print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
             # Plot
             x_test[Y.columns[0]] = Y
-            x_test['n_observations'] = np.arange(1, len(x_test)+1).reshape(len(x_test), 1)
+            x_test['Observations'] = np.arange(1, len(x_test)+1).reshape(len(x_test), 1)
             x_test['OLS_predicted_' + Y.columns[0]] = np.array(y_hat).reshape(len(y_hat), 1)
-            fig = px.line(x_test, x_test['n_observations'], y=[Y.columns[0], 'OLS_predicted_' + Y.columns[0]])
+            x_test['Predicted ' + Y.columns[0]] = np.array(y_hat).reshape(len(y_hat), 1)
+
+            fig = px.line(x_test, x_test['Observations'], y=[Y.columns[0], 'Predicted ' + Y.columns[0]])
 
             fig.update_layout(plot_bgcolor='white')
             fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
             fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
             fig.update_xaxes(showgrid=True)
             fig.update_yaxes(showgrid=False)
+            if title ==None:
+                title_str = dim_red_method +' Resultant Feature Space:  Predicted '\
+                                          + Y.columns[0] + ' vs Actual ' + \
+                                          Y.columns[0] + ': MSE = ' + str(MSE)
+            else:
+                title_str = title
+
             fig.update_layout(showlegend=True,
-                              title_text= dim_red_method +' Resultant Feature Space:  OLS_predicted_'
-                                          + Y.columns[0] + ' vs Actual ' +
-                                          Y.columns[0] + ': MSE = ' + str(MSE))
+                              title_text=title_str,
+                              yaxis_title =Y.columns[0])
 
 
         return y_hat_model, x_test, fig
@@ -835,7 +847,7 @@ class EDA:
 
         return df,fig
 
-    def poly_grid_search_2D(self,X,y):
+    def poly_grid_search_2D(self,X,indep_feat,y,dep_targ):
 
 
         fig = go.Figure()
@@ -869,34 +881,36 @@ class EDA:
 
 
         # Show the best prediction
-        grid = GridSearchCV(model, {'polynomialfeatures__degree': [15]})
-        x_train,x_test,y_train,y_test=train_test_split(X,y,
-                                                       test_size=0.2,
-                                                       random_state=1,
-                                                       shuffle=True)
-        grid.fit(np.array(x_train).reshape(len(x_train), 1), y_train)
-
-        Y = y_test
-        # X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
-        y_hat = grid.predict(np.array(x_test).reshape(len(x_test), 1))
-        e = np.array(Y) - np.array(y_hat.reshape(len(y_hat), 1))
-        MSE = mean_squared_error(np.array(Y), np.array(y_hat.reshape(len(y_hat), 1)))
-        print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
-        # Plot
-        x_test = pd.DataFrame(x_test)
-        x_test['Sales'] = Y
-        x_test['n_observations'] = np.arange(1, len(x_test) + 1).reshape(len(x_test), 1)
-        x_test['OLS_predicted_Sales'] = np.array(y_hat).reshape(len(y_hat), 1)
-        fig2 = px.line(x_test, x_test['n_observations'], y=['OLS_predicted_Sales'])
-
-        fig2.update_layout(plot_bgcolor='white')
-        fig2.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-        fig2.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-        fig2.update_xaxes(showgrid=True)
-        fig2.update_yaxes(showgrid=False)
-        fig2.update_layout(showlegend=True,
-                          title_text='Polynomial regression model - sales prediction per the price')
-
-        return fig, fig2
+        return fig,grid.best_params_
+        # grid = GridSearchCV(model, {'polynomialfeatures__degree': [15]})
+        # polynomial_features = PolynomialFeatures(degree=15)
+        # X_p = polynomial_features.fit_transform(np.array(X).reshape(len(X),1))
+        # x_train,x_test,y_train,y_test=train_test_split(X,y,
+        #                                                test_size=0.2,
+        #                                                random_state=1,
+        #                                                shuffle=True)
+        # model = sm.OLS(y_train, x_train).fit()
+        # # grid.fit(np.array(x_train).reshape(len(x_train), 1), y_train)
+        #
+        # Y = y_test
+        # y_hat = np.array(model.predict(y_test))
+        # MSE = mean_squared_error(np.array(Y), np.array(y_hat.reshape(len(y_hat), 1)))
+        # print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
+        # # Plot
+        # x_test = pd.DataFrame(x_test)
+        # x_test[dep_targ] = Y
+        # x_test['n_observations'] = np.arange(1, len(x_test) + 1).reshape(len(x_test), 1)
+        # x_test['OLS_predicted_'+dep_targ] = np.array(y_hat).reshape(len(y_hat), 1)
+        # fig2 = px.line(x_test, x_test['n_observations'], y=['OLS_predicted_'+dep_targ])
+        #
+        # fig2.update_layout(plot_bgcolor='white')
+        # fig2.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        # fig2.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        # fig2.update_xaxes(showgrid=True)
+        # fig2.update_yaxes(showgrid=False)
+        # fig2.update_layout(showlegend=True,
+        #                   title_text='Polynomial regression model - sales prediction per the price')
+        #
+        # return fig, fig2
 
 

@@ -15,6 +15,7 @@ if __name__ == '__main__':
     eda = EDA('Clifford Tatum Lab 4 - CS-5525')
     url = 'https://raw.githubusercontent.com/rjafari979/Information-Visualization-Data-Analytics-Dataset-/main/Carseats.csv'
     df = pd.read_csv(url)
+    show_plot = True
 
     # Problem 1)A
     fig1 = eda.show_hbar(df,
@@ -85,17 +86,17 @@ if __name__ == '__main__':
                                           title = ' Random Forest Analysis:  Car seats ')
 
     # Problem 4c through e
-    OLS_model_RFA,results_RFA,fig5 = eda.drop_and_show_OLS_prediction( x_train = x_train,
-                                             y_train = y_train,
-                                             x_test = x_test,
-                                             y_test = y_test,
-                                             dropped_feats=drop_these,
-                                             show=True,
-                                             compute_prediction=True,
-                                             compute_method='package',
-                                             dim_red_method='Random Forest Analysis')
+    OLS_model_RFA,results_RFA,fig5 = eda.drop_and_show_OLS_prediction(   x_train = x_train.copy(deep=True),
+                                                                     y_train = y_train.copy(deep=True),
+                                                                     x_test = x_test.copy(deep=True),
+                                                                     y_test = y_test.copy(deep=True),
+                                                                     dropped_feats=drop_these,
+                                                                     show=True,
+                                                                     title=None,
+                                                                     compute_prediction=True,
+                                                                     compute_method='package',
+                                                                     dim_red_method='Random Forest Analysis')
     # Problem 5 and 6
-
     df_comp,fig6 = eda.compare_OLS_models(model_a=OLS_model_BLR,
                                      model_b=OLS_model_RFA,
                                      mod_a_distinct_method='Backward Linear Regression',
@@ -105,20 +106,37 @@ if __name__ == '__main__':
                                      show_best = True)
 
     # Problem 7
-    fig7,fig8 = eda.poly_grid_search_2D(X=df_standardized_no_target['Price'],
-                            y=df_encoded['Sales'])
+    fig7,best_poly_degree = eda.poly_grid_search_2D(X=df_standardized_no_target['Price'],
+                                        indep_feat ='Price' ,
+                                        y=df_encoded['Sales'],
+                                        dep_targ = 'Sales')
 
 
+    from sklearn.preprocessing import PolynomialFeatures
+    polynomial_features = PolynomialFeatures(degree=best_poly_degree['polynomialfeatures__degree'])
+
+    x_train,x_test,y_train,y_test = eda.split_80_20(df=df_encoded_sub_standardized.copy(deep=True)[['Sales','Price']],
+                                                    target="Sales")
+    x_train = polynomial_features.fit_transform(x_train)
+    OLS_model_poly,results_poly,fig8 = eda.drop_and_show_OLS_prediction(  x_train = x_train,
+                                                                     y_train = y_train,
+                                                                     x_test = x_test,
+                                                                     y_test = y_test,
+                                                                     dropped_feats=None,
+                                                                     show=True,
+                                                                     title='Polynomial regression model - Sales prediction per the Price',
+                                                                     compute_prediction=True,
+                                                                     compute_method='package',
+                                                                     dim_red_method=None)
 
 
+    if show_plot:
+        fig1.show()
+        fig2.show()
+        fig3.show()
+        fig4.show()
+        fig5.show()
+        fig6.show()
+        fig7.show()
+        fig8.show()
 
-
-    # fig1.show()
-    # fig2.show()
-    # fig3.show()
-    # fig4.show()
-    # fig5.show()
-    # fig6.show()
-    fig7.show()
-    fig8.show()
-    pass
