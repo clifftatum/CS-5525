@@ -3,6 +3,8 @@ from matplotlib import pyplot as plt
 from src.EDA import EDA
 import seaborn as sb
 import numpy as np
+np.set_printoptions(precision=3)
+
 
 
 sb.set(color_codes=True)
@@ -44,17 +46,79 @@ if __name__ == '__main__':
                         title='Total Sales outside the US by Shelf Location',
                         head = None)
     # Problem 1)B
-    df_encoded,encoded_ind = eda.one_hot_encode(df)
+    df_encoded,encoded_ind = eda.one_hot_encode(df.copy(deep=True))
 
     # Problem 1)C
-    df_encoded.iloc[:,encoded_ind] = eda.standardize(df_encoded.iloc[:,encoded_ind])
-    x_train,x_test,y_train,y_test = eda.split_80_20(df_encoded, target="Sales")
+    df_encoded_sub_standardized = df_encoded.copy(deep=True)
+    df_encoded_sub_standardized.iloc[:,encoded_ind] = eda.standardize(df=df_encoded_sub_standardized.iloc[:,encoded_ind],
+                                                                      compute_method='manual')
+    x_train,x_test,y_train,y_test = eda.split_80_20(df=df_encoded_sub_standardized.copy(deep=True),
+                                                    target="Sales")
 
     # Problem 2
-    x_train = eda.backward_linear_regression(x_train = x_train,
-                                         y_train = y_train,
-                                         show=True)
+    OLS_model_BLR,results_BLR,fig2 = eda.backward_linear_regression( x_train = x_train.copy(deep=True),
+                                                             y_train = y_train.copy(deep=True),
+                                                             x_test = x_test.copy(deep=True),
+                                                             y_test = y_test.copy(deep=True),
+                                                             compute_prediction=True,
+                                                             compute_method='package',
+                                                             show=True)
 
 
-    fig1.show()
+    # Problem 3
+    df_enc_no_target = df_encoded.copy(deep=True)
+    df_enc_no_target.drop(columns = 'Sales',inplace=True)
+
+    df_standardized_no_target = eda.standardize(df=df_enc_no_target,
+                                                compute_method='manual')
+
+    n_req_features_for90_perc_exp_var,fig3 = eda.get_pca(df=df_standardized_no_target,
+                                                         show_cum_exp_var=True,
+                                                         required_exp_variance=0.9)
+
+    # Problem 4 A)
+    fig4,drop_these = eda.random_forest_analysis(X=df_standardized_no_target,
+                                          y=df_encoded['Sales'],
+                                          max_features = n_req_features_for90_perc_exp_var,
+                                          rank_list=None,
+                                          plot_type='plotly',
+                                          title = ' Random Forest Analysis:  Car seats ')
+
+    # Problem 4c through e
+    OLS_model_RFA,results_RFA,fig5 = eda.drop_and_show_OLS_prediction( x_train = x_train,
+                                             y_train = y_train,
+                                             x_test = x_test,
+                                             y_test = y_test,
+                                             dropped_feats=drop_these,
+                                             show=True,
+                                             compute_prediction=True,
+                                             compute_method='package',
+                                             dim_red_method='Random Forest Analysis')
+    # Problem 5 and 6
+
+    df_comp,fig6 = eda.compare_OLS_models(model_a=OLS_model_BLR,
+                                     model_b=OLS_model_RFA,
+                                     mod_a_distinct_method='Backward Linear Regression',
+                                     mod_b_distinct_method='Random Forest Analysis',
+                                     mod_a_res=results_BLR,
+                                     mod_b_res=results_RFA,
+                                     show_best = True)
+
+    # Problem 7
+    fig7,fig8 = eda.poly_grid_search_2D(X=df_standardized_no_target['Price'],
+                            y=df_encoded['Sales'])
+
+
+
+
+
+
+    # fig1.show()
+    # fig2.show()
+    # fig3.show()
+    # fig4.show()
+    # fig5.show()
+    # fig6.show()
+    fig7.show()
+    fig8.show()
     pass

@@ -1,15 +1,16 @@
 import numpy as np
 import pandas as pd
-import seaborn as sns
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 from scipy.stats import gmean
 from scipy.stats import hmean
-from scipy.spatial import distance
-from sklearn import metrics, preprocessing
-from sklearn.datasets import make_regression,make_classification,make_blobs
-import sklearn
+np.set_printoptions(precision=3)
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import normalize
 from sklearn.decomposition import PCA
+from sklearn.metrics import mean_squared_error
 from prettytable import PrettyTable
 import plotly.express as px
 import plotly.graph_objects as go
@@ -221,15 +222,20 @@ class EDA:
         df_norm = pd.DataFrame(x_norm_mat,columns=df_norm_columns)
         return df_norm
 
-    def standardize(self,df):
+    def standardize(self,df,compute_method):
         df_init = self.get_numerical_features(df)
-        feat_names = list(df_init.columns)
         df_stand_columns = [f'{df_init.columns[i]}' for i in range(0, df_init.shape[1])]
-        x_stand_mat = np.zeros((df_init.shape[0],df_init.shape[1]))
-        for i,fn in enumerate(feat_names):
-            x = df_init[fn]
-            x_stand_mat[:,i] = (x - np.mean(x))/np.std(x)
-        df_stand = pd.DataFrame(x_stand_mat,columns=df_stand_columns)
+        if compute_method is 'manual':
+            feat_names = list(df_init.columns)
+            x_stand_mat = np.zeros((df_init.shape[0],df_init.shape[1]))
+            for i,fn in enumerate(feat_names):
+                x = df_init[fn]
+                x_stand_mat[:,i] = (x - np.mean(x))/np.std(x)
+            df_stand = pd.DataFrame(x_stand_mat,columns=df_stand_columns)
+
+        elif compute_method is 'package':
+            from sklearn.preprocessing import scale
+            df_stand = pd.DataFrame(scale(df), columns=df_stand_columns)
         return df_stand
 
 
@@ -306,11 +312,29 @@ class EDA:
         # plt.tight_layout()
         return plot_on_this
 
-    def get_pca(self,df):
-        pca = PCA(n_components=len(df.columns),svd_solver='full')
-        pca.fit(df)
-        X_PCA = pca.transform(df)
-        return X_PCA
+    def get_pca(self,df,show_cum_exp_var,required_exp_variance):
+        pca = PCA(n_components=df.shape[1])
+        the_PCA = pca.fit(df)
+        cum_exp_var = np.cumsum(the_PCA.explained_variance_ratio_)
+        n_required_features = np.argwhere(cum_exp_var > required_exp_variance)[0]+1
+        if show_cum_exp_var:
+            fig = px.area(x = np.arange(1,df.shape[1]+1),y=cum_exp_var)
+            fig.update_layout(plot_bgcolor='white')
+            fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+            fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+            fig.update_xaxes(showgrid=True,tickvals = np.arange(1,df.shape[1]+1),)
+            fig.update_yaxes(showgrid=False)
+            fig.update_layout(showlegend=True,
+                              yaxis_range=[0, 1.02],
+                              xaxis_title = 'Number of Features',
+                              yaxis_title= 'Cumulative Explained Variance',
+                              title_text='Cumulative Explained Variance for PCA ')
+        else:
+            fig = None
+
+
+
+        return n_required_features,fig
 
     def plot_features_unified_xaxis(self,df,x_axis_feature,y_axis_feature,observation_ID,plot_type,title):
         plt.figure(figsize=(12, 8))
@@ -372,14 +396,14 @@ class EDA:
         return m_i
 
     def to_pretty_table(self,dat,title,head):
-        pd.set_option("display.precision", 2)
+        pd.set_option("display.precision", 3)
         if isinstance(dat, pd.DataFrame):
-            data = dat.round(decimals=2).values
+            data = dat.round(decimals=3).values
             if head is None:
                 headers = dat.columns
         else:
             try:
-                data = np.round(dat, 2)
+                data = np.round(dat, 3)
                 headers = list(head)
             except:
                 data=dat
@@ -436,24 +460,36 @@ class EDA:
             diff.append(value)
             return np.array(diff).reshape(len(diff),1)
 
-    def show_random_forest_analysis(self,X,y,rank_list,plot_type,title):
+    def random_forest_analysis(self,X,y,rank_list,plot_type,title,max_features):
 
         model = RandomForestRegressor(random_state=1,
                                       max_depth=5,
                                       n_estimators=100)
 
-        if self.get_num_categorical_features(y) ==1:
+        if rank_list is not None and self.get_num_categorical_features(y) ==1 :
             y['rank'] = None
             for index, row in y.iterrows():
                 y['rank'][index] = rank_list.index(row['target_buy_sell_performance'])
+            y = y['rank']
 
 
-        model.fit(X, y['rank'])
+        model.fit(X, y)
 
 
         features = X.columns
         importance = model.feature_importances_
-        indices = np.argsort(importance)[-len(importance):]  # top 20
+        indices = np.argsort(importance)[-int(max_features):]  # top 20
+
+        keep_features = [features[i] for i in indices]
+        remove_features = list(set(features) - set(keep_features))
+
+        # Show the dropped features
+        # self.to_pretty_table(dat = dropped_feats,title='Dropped Features:',head='None')
+        print(f'Dropped Features: {remove_features}')
+
+        # Show the kept features
+        # self.to_pretty_table(dat = x_train_init.columns,title='Kept Features:',head='None')
+        print(f'Kept Features: {keep_features}')
 
         if plot_type == 'matplotlib':
             plt.barh(range(len(indices)), importance[indices], color='b', align='center')
@@ -475,7 +511,7 @@ class EDA:
             # for idx in range(len(fig.data)):
             #     fig.data[idx].y = ticktext[idx]
 
-            return fig
+            return fig,remove_features
 
     def show_hbar(self,df,x_feat,y_feat,by_leg_category):
         fig = px.bar(df, x=x_feat, y=y_feat, color=by_leg_category, orientation='h')
@@ -549,14 +585,14 @@ class EDA:
                                                        shuffle=True)
         return x_train,x_test,y_train,y_test
 
-    def backward_linear_regression(self,x_train,y_train,show):
+    def backward_linear_regression(self,x_train,y_train,x_test,y_test,compute_prediction,compute_method,show):
         x_train_init = x_train.copy(deep=True)
-        Rsqs = {}
-        adjRsqr = {}
         models = {}
+        prediction=None
         dropped_feats = []
-        d_adjusted_R_squared_by_d_dropped = None
-        best_model = None
+        R_squared_rates = []
+        adjRsqr = []
+        potential_best_model = None
         for i,feat in enumerate(x_train):
             if i==0:
                 msg_str = 'full feature space'
@@ -567,24 +603,23 @@ class EDA:
 
             # Compute the linear regression
             model = sm.OLS(y_train, x_train).fit()
+            if i==0:
+                print(f'Initial model: {model.summary2(float_format="%.3f")}')
 
             # Measure the model, the R_squared and the Adjusted R squared, the feature with the max p-value
-            Rsqs.update({msg_str:model.rsquared})
-            adjRsqr.update({msg_str: model.rsquared_adj})
+            adjRsqr.append(model.rsquared_adj)
 
             # Track the change in adj Rsq by pruned features
             if i>0:
-                d_adjusted_R_squared_by_d_dropped = (model.rsquared_adj-prev_adj_R_squared)/1
-                if d_adjusted_R_squared_by_d_dropped<0: # if the adj R squared is negative the removal of this
-                    # feature does NOT improve the explained variance of the linear regression
-                    # return previous model
-                    best_model = models[prev_msg_str]
-                    dropped_feats.pop()
-                    break
+                R_squared_rates.append(np.round((model.rsquared_adj - prev_adj_R_squared) * 100, 2))
+            else:
+                R_squared_rates.append(0)
 
-            models.update({msg_str: model})
+            models.update({prev_adj_R_squared: model})
             max_p_ind = np.argmax(model.pvalues)
             if np.max(model.pvalues)<=0.05: # if the max p-value is below the acceptable threshold , break
+                temp = x_train_init.drop(columns=dropped_feats)
+                potential_best_model = sm.OLS(y_train,temp ).fit()
                 break
             # Drop the feature with the highest p value
             dropped_feats.append(x_train.columns[max_p_ind])
@@ -605,6 +640,263 @@ class EDA:
             print(f'Kept Features: {x_train_init.columns}')
 
             # Show the best model summary
-            print(f'Best Model Summary: {best_model.summary()}')
-        return x_train_init
+            min_adjusted_R_sqrd_rate = min(R_squared_rates)
+            if min_adjusted_R_sqrd_rate > -5:
+                print(f'Best Model Summary: {potential_best_model.summary2(float_format="%.3f")}')
+            else:
+                ind_select_model = np.argmin(R_squared_rates)-1
+                potential_best_model = models[adjRsqr[ind_select_model]]
+                dropped_feats = dropped_feats[0:ind_select_model]
+                print(f'Best Model Summary: {potential_best_model.summary2(float_format="%.3f")}')
+
+        # Compute a prediction on the test data set
+            if compute_prediction and compute_method is 'manual':
+                # Manual
+                x_test = x_test.drop(columns =dropped_feats)
+                X = np.hstack((np.ones(len(x_test)).reshape(len(x_test),1),x_test))
+                Y = y_test
+                H = X.T @ X
+                Beta = np.linalg.inv(H) @ X.T @ Y
+                y_hat = X @ Beta # here is B* or the predicition
+                e = np.array(Y) - np.array(y_hat)
+                SSE = e.T @ e
+                MSE = np.mean(e**2)
+
+            elif compute_prediction and compute_method is 'package':
+                # Using Package
+                Y = y_test
+                x_test = x_test.drop(columns=dropped_feats)
+                X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
+                y_hat_model = sm.OLS(Y,X).fit() #.predict(exog=X)
+                y_hat = y_hat_model.predict()
+                e = np.array(Y) - np.array(y_hat.reshape(len(y_hat),1))
+                SSE = e.T @ e
+                MSE = mean_squared_error(np.array(Y),np.array(y_hat.reshape(len(y_hat),1)))
+            if show:
+                print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
+
+                x_test[Y.columns[0]] = Y
+                x_test['n_observations'] = np.arange(1, len(x_test) + 1).reshape(len(x_test), 1)
+                x_test['OLS_predicted_'+Y.columns[0]] = np.array(y_hat).reshape(len(y_hat),1)
+                fig = px.line(x_test, x_test['n_observations'] , y=[Y.columns[0],'OLS_predicted_'+Y.columns[0]])
+
+                fig.update_layout(plot_bgcolor='white')
+                fig.update_xaxes(mirror=False,ticks='outside',showline=True,linecolor='black',gridcolor='lightgrey')
+                fig.update_yaxes(mirror=True,ticks='outside',showline=True,linecolor='black',gridcolor='lightgrey')
+                fig.update_xaxes(showgrid=True)
+                fig.update_yaxes(showgrid=False)
+                fig.update_layout(showlegend=True,
+                                  title_text='Backwards Linear Regression Resultant Feature Space: OLS_predicted_'+Y.columns[0] + ' vs Actual ' +
+                                             Y.columns[0] + ': MSE = ' + str(MSE) )
+            else:
+                fig = None
+
+
+        return y_hat_model, x_test, fig
+
+    def drop_and_show_OLS_prediction(self,x_train,y_train,x_test,y_test,dropped_feats,show,compute_prediction,
+                                     compute_method,dim_red_method):
+        # Drop the features
+        x_train.drop(columns=dropped_feats,axis=1, inplace=True)
+        # Compute the linear regression
+        model = sm.OLS(y_train, x_train).fit()
+        fig = None
+        if show:
+            print(f'Model Summary: {model.summary2(float_format="%.3f")}')
+            if compute_prediction and compute_method is 'package':
+                # Compute a prediction on the test data set
+                # Using Package
+                Y = y_test
+                x_test = x_test.drop(columns=dropped_feats)
+                X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
+                y_hat_model = sm.OLS(Y, X).fit()
+                y_hat = y_hat_model.predict()
+                e = np.array(Y) - np.array(y_hat.reshape(len(y_hat), 1))
+                SSE = e.T @ e
+                MSE = mean_squared_error(np.array(Y), np.array(y_hat.reshape(len(y_hat), 1)))
+            elif compute_prediction and compute_method is 'manual':
+                x_test = x_test.drop(columns =dropped_feats)
+                X = np.hstack((np.ones(len(x_test)).reshape(len(x_test),1),x_test))
+                Y = y_test
+                H = X.T @ X
+                Beta = np.linalg.inv(H) @ X.T @ Y
+                y_hat = X @ Beta # here is B* or the predicition
+                e = np.array(Y) - np.array(y_hat)
+                SSE = e.T @ e
+                MSE = np.mean(e**2)
+            print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
+            # Plot
+            x_test[Y.columns[0]] = Y
+            x_test['n_observations'] = np.arange(1, len(x_test)+1).reshape(len(x_test), 1)
+            x_test['OLS_predicted_' + Y.columns[0]] = np.array(y_hat).reshape(len(y_hat), 1)
+            fig = px.line(x_test, x_test['n_observations'], y=[Y.columns[0], 'OLS_predicted_' + Y.columns[0]])
+
+            fig.update_layout(plot_bgcolor='white')
+            fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+            fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+            fig.update_xaxes(showgrid=True)
+            fig.update_yaxes(showgrid=False)
+            fig.update_layout(showlegend=True,
+                              title_text= dim_red_method +' Resultant Feature Space:  OLS_predicted_'
+                                          + Y.columns[0] + ' vs Actual ' +
+                                          Y.columns[0] + ': MSE = ' + str(MSE))
+
+
+        return y_hat_model, x_test, fig
+
+
+    def compare_OLS_models(self,model_a,model_b,mod_a_distinct_method,mod_b_distinct_method,mod_a_res,mod_b_res,show_best):
+        df = pd.DataFrame()
+        df['Model Predictor Metrics:'] = ['AIC (minimize)','BIC (minimize)','MSE (minimize)','Adj. R^2 (maximize)']
+
+        mod_a_y_hat_name = mod_a_res.columns[np.where(np.array([i.find('OLS') for i in mod_a_res.columns]) == 0)]
+        target_name_pred = mod_a_res[mod_a_y_hat_name].columns[0]
+        y_hat = np.array(mod_a_res[mod_a_y_hat_name])
+        Y = np.array(mod_a_res[mod_a_y_hat_name[0].split('_')[-1]])
+        MSE_A = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
+
+        mod_b_y_hat_name = mod_b_res.columns[np.where(np.array([i.find('OLS') for i in mod_b_res.columns]) == 0)]
+        y_hat = np.array(mod_b_res[mod_b_y_hat_name])
+        Y = np.array(mod_b_res[mod_b_y_hat_name[0].split('_')[-1]])
+        MSE_B = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
+
+        df[mod_a_distinct_method] = [model_a.aic,model_a.bic,MSE_A,model_a.rsquared_adj]
+        df[mod_b_distinct_method] = [model_b.aic, model_b.bic, MSE_B, model_b.rsquared_adj]
+
+        self.to_pretty_table(dat=df,
+                            title='OLS Model Predictor Metric Comparison',
+                            head=None)
+
+
+        if show_best:
+            best_wrt_minimize_predictors = df.iloc[0:-1,1:].idxmin(axis=1).unique()
+            r_squared_potential_best = self.slice_by_observation(df=df,
+                                      feature=best_wrt_minimize_predictors,
+                                      observations=['Adj. R^2 (maximize)'],
+                                      obs_by_feature=['Model Predictor Metrics:']).iloc[0,0]
+            other_wrt_minimize_predictors = df.iloc[0:-1,1:].idxmax(axis=1).unique()
+            r_squared_expected_worst = self.slice_by_observation(df=df,
+                                      feature=other_wrt_minimize_predictors,
+                                      observations=['Adj. R^2 (maximize)'],
+                                      obs_by_feature=['Model Predictor Metrics:']).iloc[0,0]
+
+            if len(best_wrt_minimize_predictors)==1 and len(other_wrt_minimize_predictors)==1 and \
+                r_squared_potential_best>r_squared_expected_worst:
+
+                rec_method_name = best_wrt_minimize_predictors
+                if rec_method_name == mod_a_distinct_method:
+                    rec_model = model_a
+                    rec_res = mod_a_res
+                else:
+                    rec_model = model_b
+                    rec_res = mod_b_res
+                # Plot
+
+                fig = go.Figure()
+                predictions = rec_model.get_prediction()
+                df_predictions = predictions.summary_frame()
+
+                fig.add_trace(go.Scatter(name = "CI",x=rec_res.n_observations,
+                                         y=df_predictions.obs_ci_lower.iloc[:],
+                                         line=dict(color='rgba(0, 0, 255, 0.05)'),
+                                         fillcolor="#eaecee",
+                                         connectgaps=False,
+                                         ))
+                fig.add_trace(go.Scatter(name =None,x=rec_res.n_observations,
+                                         y=df_predictions.obs_ci_upper.iloc[:],
+                                         line=dict(color='rgba(0, 0, 255, 0.05)'),
+                                         fill="tonexty",
+                                         fillcolor="#EAEDF8",
+                                         connectgaps=False,showlegend=False
+                                         ))
+
+                fig.add_trace(go.Scatter(name =target_name_pred, x=rec_res.n_observations,
+                                         y=rec_res[target_name_pred],
+                                         line=dict(color='blue')))
+
+
+
+
+
+
+                fig.update_layout(plot_bgcolor='white')
+                fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+                fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+                fig.update_xaxes(showgrid=True)
+                fig.update_yaxes(showgrid=False)
+                fig.update_layout(showlegend=True,
+                                  yaxis_title=target_name_pred.split('_')[-1], xaxis_title='# of Samples',
+                                  title_text=str(target_name_pred) + ' with Confidence Interval (CI) ')
+            else:
+                rec_method_name = None
+                rec_model = None
+                fig = None
+                print(f'WARNING: OLS predictors do not unanimously recommend a model, use inspection. ')
+
+        return df,fig
+
+    def poly_grid_search_2D(self,X,y):
+
+
+        fig = go.Figure()
+
+        # Pipeline for polynomial regression
+        model = make_pipeline(
+            PolynomialFeatures(include_bias=False),
+            LinearRegression()
+        )
+        for i in np.arange(1,16):
+
+            # define the parameters to search over
+            param_grid = {'polynomialfeatures__degree': [i]}
+
+            # Search over the degree of polynomial features given in param_grid
+            grid = GridSearchCV(model, param_grid)
+            # Use the LinearRegression to fit each element of the grid
+            grid.fit(np.array(X).reshape(len(X),1), y)
+            y_hat = grid.predict(np.array(X).reshape(len(X),1))
+            RMSE = np.sqrt(np.square(np.subtract(y,y_hat)).mean())
+            fig.add_trace(go.Scatter(x=np.array([i]),y=np.array(RMSE),marker={'size': 15},name="n= "+str(i)))
+
+        fig.update_layout(plot_bgcolor='white')
+        fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        fig.update_xaxes(showgrid=True)
+        fig.update_yaxes(showgrid=False)
+        fig.update_layout(showlegend=True,
+                          yaxis_title='RMSE', xaxis_title='n order polynomial model',
+                          title_text='Polynomial Regression grid search for M=1 features linearly dependant features ')
+
+
+        # Show the best prediction
+        grid = GridSearchCV(model, {'polynomialfeatures__degree': [15]})
+        x_train,x_test,y_train,y_test=train_test_split(X,y,
+                                                       test_size=0.2,
+                                                       random_state=1,
+                                                       shuffle=True)
+        grid.fit(np.array(x_train).reshape(len(x_train), 1), y_train)
+
+        Y = y_test
+        # X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
+        y_hat = grid.predict(np.array(x_test).reshape(len(x_test), 1))
+        e = np.array(Y) - np.array(y_hat.reshape(len(y_hat), 1))
+        MSE = mean_squared_error(np.array(Y), np.array(y_hat.reshape(len(y_hat), 1)))
+        print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
+        # Plot
+        x_test = pd.DataFrame(x_test)
+        x_test['Sales'] = Y
+        x_test['n_observations'] = np.arange(1, len(x_test) + 1).reshape(len(x_test), 1)
+        x_test['OLS_predicted_Sales'] = np.array(y_hat).reshape(len(y_hat), 1)
+        fig2 = px.line(x_test, x_test['n_observations'], y=['OLS_predicted_Sales'])
+
+        fig2.update_layout(plot_bgcolor='white')
+        fig2.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        fig2.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        fig2.update_xaxes(showgrid=True)
+        fig2.update_yaxes(showgrid=False)
+        fig2.update_layout(showlegend=True,
+                          title_text='Polynomial regression model - sales prediction per the price')
+
+        return fig, fig2
+
 

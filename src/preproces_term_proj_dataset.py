@@ -1,6 +1,6 @@
 import pandas as pd
 from matplotlib import pyplot as plt
-from EDA import EDA
+from src.EDA import EDA
 import seaborn as sb
 import numpy as np
 
@@ -20,7 +20,7 @@ pd.options.display.float_format = "{:,.2f}".format
 
 if __name__ == '__main__':
     eda = EDA('Clifford Tatum Term Project - DATASET PREPROCESSING - CS-5525')
-    url = 'C:\\Users\\cft5385\\Documents\\Learning\\CS-5525\\pythonProject\\deflation_market-dataset_2023_cliffordt_CS5525_term_dataset.csv'
+    url = 'C:\\Users\\cft5385\\Documents\\Learning\\CS-5525\Code\\deflation_market-dataset_2023_cliffordt_CS5525_term_dataset.csv'
     df = pd.read_csv(url)
 
 
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     df.drop(['DateTime'],axis=1,inplace=True)
     df.drop(['Unnamed: 0'], axis=1,inplace=True)
 
-    df['target_buy_sell_performance'].value_counts().plot()
+    df['target_buy_sell_performance'].value_counts().plot(ylim = (0,10))
 
 
 
@@ -105,6 +105,6 @@ if __name__ == '__main__':
 
 
 
-    df.to_csv('DELIVER_CS5525_term_dataset_cliffordt_Deflation_EcoEnv_Nov2022_Jan2023.csv')
+    # df.to_csv('DELIVER_CS5525_term_dataset_cliffordt_Deflation_EcoEnv_Nov2022_Jan2023.csv')
 
     plt.show()

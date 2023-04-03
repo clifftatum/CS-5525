@@ -21,7 +21,6 @@ if __name__ == '__main__':
     # Ordinary Least Squares Regression
     ###################################################################################################################
     # Manual
-
     H = X.T @ X
     Beta = np.linalg.inv(H) @ X.T @ Y
     y_hat = X @ Beta
