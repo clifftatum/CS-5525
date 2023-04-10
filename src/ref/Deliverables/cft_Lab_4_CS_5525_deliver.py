@@ -1,9 +1,15 @@
+import pandas as pd
+from matplotlib import pyplot as plt
+import seaborn as sb
+import numpy as np
+np.set_printoptions(precision=3)
+sb.set(color_codes=True)
+pd.set_option("display.precision", 3)
+pd.options.display.float_format = "{:,.2f}".format
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 from scipy.stats import gmean
@@ -853,151 +859,182 @@ class EDA:
 
         return df,fig
 
-    def grid_search_2D(self,model_type,X,y):
+    def poly_grid_search_2D(self,X,indep_feat,y,dep_targ):
+
 
         fig = go.Figure()
 
-        if model_type == 'Polynomial regression':
-            # Pipeline for polynomial regression
-            model = make_pipeline(
-                PolynomialFeatures(include_bias=False),
-                LinearRegression()
-            )
-        elif model_type == 'Decision Tree Classifier':
-            model = make_pipeline(
-                DecisionTreeClassifier()
-            )
-            param_grid = [{'max_depth': [2,4,6],
-                           'min_samples_split': [1,5],
-                           'min_samples_leaf': [1,5],
-                           'max_features': [2,4,6,8,16,24,36],
-                           'splitter': ['best', 'random'],
-                           'criterion': ['gini', 'entropy', 'log_loss']}]
+        # Pipeline for polynomial regression
+        model = make_pipeline(
+            PolynomialFeatures(include_bias=False),
+            LinearRegression()
+        )
+        for i in np.arange(1,16):
 
-            dtc = DecisionTreeClassifier(random_state=123)
-            # Search over the defined grid
-            grid = GridSearchCV(estimator=dtc, param_grid=param_grid, verbose=True)
-            # Use the DecisionTreeClassifier to fit the best model to the train data
-            model =grid.fit(X.values, y.values)
-            model = model.best_estimator_
-            fig = None
+            # define the parameters to search over
+            param_grid = {'polynomialfeatures__degree': [i]}
 
+            # Search over the degree of polynomial features given in param_grid
+            grid = GridSearchCV(model, param_grid)
+            # Use the LinearRegression to fit each element of the grid
+            grid.fit(np.array(X).reshape(len(X),1), y)
+            y_hat = grid.predict(np.array(X).reshape(len(X),1))
+            RMSE = np.sqrt(np.square(np.subtract(y,y_hat)).mean())
+            fig.add_trace(go.Scatter(x=np.array([i]),y=np.array(RMSE),marker={'size': 15},name="n= "+str(i)))
 
-
-        if model_type == 'Polynomial regression':
-            for i in np.arange(1,16):
-                # define the parameters to search over
-                param_grid = {'polynomialfeatures__degree': [i]}
-
-                # Search over the degree of polynomial features given in param_grid
-                grid = GridSearchCV(model, param_grid)
-                # Use the LinearRegression to fit each element of the grid
-                grid.fit(np.array(X).reshape(len(X),1), y)
-                y_hat = grid.predict(np.array(X).reshape(len(X),1))
-                RMSE = np.sqrt(np.square(np.subtract(y,y_hat)).mean())
-                fig.add_trace(go.Scatter(x=np.array([i]),y=np.array(RMSE),marker={'size': 15},name="n= "+str(i)))
-            model = grid.fit(np.array(X).reshape(len(X), 1), y)
-
-            fig.update_layout(plot_bgcolor='white')
-            fig.update_xaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-            fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-            fig.update_xaxes(showgrid=True)
-            fig.update_yaxes(showgrid=False)
-            fig.update_layout(showlegend=True,
-                              yaxis_title='RMSE', xaxis_title='n order polynomial model',
-                              title_text='Polynomial Regression grid search for M=1 features linearly dependant features ')
+        fig.update_layout(plot_bgcolor='white')
+        fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+        fig.update_xaxes(showgrid=True)
+        fig.update_yaxes(showgrid=False)
+        fig.update_layout(showlegend=True,
+                          yaxis_title='RMSE', xaxis_title='n order polynomial model',
+                          title_text='Polynomial Regression grid search for M=1 features linearly dependant features ')
 
 
         # Show the best prediction
-        return fig, grid.best_params_,model
-
-    def compare_DTC_models(self,model_a,model_b,mod_a_distinct_method,mod_b_distinct_method,mod_a_res,mod_b_res,show_best):
-        df = pd.DataFrame()
-        df['Model Predictor Metrics:'] = ['AIC (minimize)','BIC (minimize)','MSE (minimize)','Adj. R^2 (maximize)']
-
-        mod_a_y_hat_name = mod_a_res.columns[np.where(np.array([i.find('OLS') for i in mod_a_res.columns]) == 0)]
-        target_name_pred = mod_a_res[mod_a_y_hat_name].columns[0]
-        y_hat = np.array(mod_a_res[mod_a_y_hat_name])
-        Y = np.array(mod_a_res[mod_a_y_hat_name[0].split('_')[-1]])
-        MSE_A = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
-
-        mod_b_y_hat_name = mod_b_res.columns[np.where(np.array([i.find('OLS') for i in mod_b_res.columns]) == 0)]
-        y_hat = np.array(mod_b_res[mod_b_y_hat_name])
-        Y = np.array(mod_b_res[mod_b_y_hat_name[0].split('_')[-1]])
-        MSE_B = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
-
-        df[mod_a_distinct_method] = [model_a.aic,model_a.bic,MSE_A,model_a.rsquared_adj]
-        df[mod_b_distinct_method] = [model_b.aic, model_b.bic, MSE_B, model_b.rsquared_adj]
-
-        self.to_pretty_table(dat=df,
-                            title='OLS Model Predictor Metric Comparison',
-                            head=None)
+        return fig,grid.best_params_
 
 
-    def drop_and_show_model_prediction(self,fitted_model,x_train,y_train,x_test,y_test,dropped_feats,show,title,compute_prediction,
-                                     compute_method,dim_red_method):
-        # Drop the features
-        if dropped_feats is not None:
-            x_train.drop(columns=dropped_feats,axis=1, inplace=True)
-        # Compute the fit
-        if fitted_model ==None:
-            model = sm.OLS(y_train, x_train).fit()
-        else:
-            model = fitted_model
-        fig = None
-        if show:
-            if compute_prediction and compute_method is 'package':
-                # Compute a prediction on the test data set
-                # Using Package
-                Y = y_test
-                if dropped_feats is not None:
-                    x_test = x_test.drop(columns=dropped_feats)
-                X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
-                if fitted_model is not None:
-                    y_hat_model = model
-                    y_hat = model.predict(x_test)
-                else:
-                    print(f'Model Summary: {model.summary2(float_format="%.3f")}')
-                    y_hat_model = sm.OLS(Y, X).fit()
-                    y_hat = y_hat_model.predict()
-                e = np.array(Y) - np.array(y_hat.reshape(len(y_hat), 1))
-                SSE = e.T @ e
-                MSE = mean_squared_error(np.array(Y), np.array(y_hat.reshape(len(y_hat), 1)))
-            elif compute_prediction and compute_method is 'manual' and fitted_model ==None:
-                if dropped_feats is not None:
-                    x_test = x_test.drop(columns =dropped_feats)
-                X = np.hstack((np.ones(len(x_test)).reshape(len(x_test),1),x_test))
-                Y = y_test
-                H = X.T @ X
-                Beta = np.linalg.inv(H) @ X.T @ Y
-                y_hat = X @ Beta # here is B* or the predicition
-                e = np.array(Y) - np.array(y_hat)
-                SSE = e.T @ e
-                MSE = np.mean(e**2)
-            print(f' The mean squared error of the model against the test data is {MSE:.3f}')
-            # Plot
-            x_test[Y.columns[0]] = Y
-            x_test['Observations'] = np.arange(1, len(x_test)+1).reshape(len(x_test), 1)
-            if fitted_model == None:
-                x_test['OLS_predicted_' + Y.columns[0]] = np.array(y_hat).reshape(len(y_hat), 1)
-            x_test['Predicted ' + Y.columns[0]] = np.array(y_hat).reshape(len(y_hat), 1)
 
-            fig = px.line(x_test, x_test['Observations'], y=[Y.columns[0], 'Predicted ' + Y.columns[0]])
 
-            fig.update_layout(plot_bgcolor='white')
-            fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-            fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-            fig.update_xaxes(showgrid=True)
-            fig.update_yaxes(showgrid=False)
-            if title ==None and fitted_model is None:
-                title_str = dim_red_method +' Resultant Feature Space:  Predicted '\
-                                          + Y.columns[0] + ' vs Actual ' + \
-                                          Y.columns[0] + ': MSE = ' + str(MSE)
-            else:
-                title_str = title
-            if fitted_model is None:
-                fig.update_layout(showlegend=True,
-                                  title_text=title_str,
-                                  yaxis_title =Y.columns[0])
 
-        return y_hat_model, x_test, fig
+
+
+
+if __name__ == '__main__':
+    eda = EDA('Clifford Tatum Lab 4 - CS-5525')
+    url = 'https://raw.githubusercontent.com/rjafari979/Information-Visualization-Data-Analytics-Dataset-/main/Carseats.csv'
+    df = pd.read_csv(url)
+    show_plot = True
+
+    # Problem 1)A
+    fig1 = eda.show_hbar(df,
+                     x_feat='Sales',
+                     y_feat='ShelveLoc',
+                     by_leg_category='US')
+
+    df_agg = eda.get_aggregate(df)
+
+    df_yes_us = eda.slice_by_observation(df,feature=['Sales','ShelveLoc','US'],
+                                      observations=['Yes'],
+                                      obs_by_feature=['US'])
+
+    df_no_us = eda.slice_by_observation(df,feature=['Sales','ShelveLoc','US'],
+                                      observations=['No'],
+                                      obs_by_feature=['US'])
+
+    df_yes_us_sums_by_shelvloc = df_yes_us.groupby(['ShelveLoc']).sum()
+    df_yes_us_sums_by_shelvloc.insert(0, 'ShelveLoc', df_yes_us_sums_by_shelvloc.T.columns)
+
+    df_no_us_sums_by_shelvloc = df_no_us.groupby(['ShelveLoc']).sum()
+    df_no_us_sums_by_shelvloc.insert(0, 'ShelveLoc', df_no_us_sums_by_shelvloc.T.columns)
+
+
+    eda.to_pretty_table(dat=df_yes_us_sums_by_shelvloc,
+                        title = 'Total Sales within the US by Shelf Location',
+                        head = None)
+    eda.to_pretty_table(dat=df_no_us_sums_by_shelvloc,
+                        title='Total Sales outside the US by Shelf Location',
+                        head = None)
+    # Problem 1)B
+    df_encoded,encoded_ind = eda.one_hot_encode(df.copy(deep=True))
+    print(df_encoded.iloc[:5,encoded_ind].head())
+
+    # Problem 1)C
+    df_encoded_sub_standardized = df_encoded.copy(deep=True)
+    temp = df_encoded_sub_standardized.drop(columns=df_encoded_sub_standardized.columns[encoded_ind])
+    df_encoded_sub_standardized = eda.standardize(df=temp,
+                                                  compute_method='manual')
+    df_encoded_sub_standardized[df_encoded.columns[encoded_ind]] = df_encoded[df_encoded.columns[encoded_ind]]
+    x_train,x_test,y_train,y_test = eda.split_80_20(df=df_encoded_sub_standardized.copy(deep=True),
+                                                    target="Sales")
+    print(f'Train dataset')
+    print(x_train.head())
+    print(f'Test dataset')
+    print(x_test.head())
+    # Problem 2
+    OLS_model_BLR,results_BLR,fig2 = eda.backward_linear_regression( x_train = x_train.copy(deep=True),
+                                                             y_train = y_train.copy(deep=True),
+                                                             x_test = x_test.copy(deep=True),
+                                                             y_test = y_test.copy(deep=True),
+                                                             compute_prediction=True,
+                                                             compute_method='package',
+                                                             show=True)
+
+
+    # Problem 3
+    df_enc_no_target = df_encoded.copy(deep=True)
+    df_enc_no_target.drop(columns = 'Sales',inplace=True)
+
+    # df_standardized_no_target = eda.standardize(df=df_enc_no_target,
+    #                                             compute_method='manual')
+    df_standardized_no_target = df_encoded_sub_standardized.drop(columns=['Sales'])
+
+    n_req_features_for90_perc_exp_var,fig3 = eda.get_pca(df=df_standardized_no_target,
+                                                         show_cum_exp_var=True,
+                                                         required_exp_variance=0.9)
+
+    # Problem 4 A)
+    fig4,drop_these = eda.random_forest_analysis(X=df_standardized_no_target,
+                                          y=df_encoded['Sales'],
+                                          max_features = n_req_features_for90_perc_exp_var,
+                                          rank_list=None,
+                                          plot_type='plotly',
+                                          title = ' Random Forest Analysis:  Car seats ')
+
+    # Problem 4c through e
+    OLS_model_RFA,results_RFA,fig5 = eda.drop_and_show_OLS_prediction(   x_train = x_train.copy(deep=True),
+                                                                     y_train = y_train.copy(deep=True),
+                                                                     x_test = x_test.copy(deep=True),
+                                                                     y_test = y_test.copy(deep=True),
+                                                                     dropped_feats=drop_these,
+                                                                     show=True,
+                                                                     title=None,
+                                                                     compute_prediction=True,
+                                                                     compute_method='package',
+                                                                     dim_red_method='Random Forest Analysis')
+    # Problem 5 and 6
+    df_comp,fig6 = eda.compare_OLS_models(model_a=OLS_model_BLR,
+                                     model_b=OLS_model_RFA,
+                                     mod_a_distinct_method='Backward Linear Regression',
+                                     mod_b_distinct_method='Random Forest Analysis',
+                                     mod_a_res=results_BLR,
+                                     mod_b_res=results_RFA,
+                                     show_best = True)
+
+    # Problem 7
+    fig7,best_poly_degree = eda.poly_grid_search_2D(X=df_standardized_no_target['Price'],
+                                        indep_feat ='Price' ,
+                                        y=df_encoded['Sales'],
+                                        dep_targ = 'Sales')
+
+
+    from sklearn.preprocessing import PolynomialFeatures
+    polynomial_features = PolynomialFeatures(degree=best_poly_degree['polynomialfeatures__degree'])
+
+    x_train,x_test,y_train,y_test = eda.split_80_20(df=df_encoded_sub_standardized.copy(deep=True)[['Sales','Price']],
+                                                    target="Sales")
+    x_train = polynomial_features.fit_transform(x_train)
+    OLS_model_poly,results_poly,fig8 = eda.drop_and_show_OLS_prediction(  x_train = x_train,
+                                                                     y_train = y_train,
+                                                                     x_test = x_test,
+                                                                     y_test = y_test,
+                                                                     dropped_feats=None,
+                                                                     show=True,
+                                                                     title='Polynomial regression model - Sales prediction per the Price',
+                                                                     compute_prediction=True,
+                                                                     compute_method='package',
+                                                                     dim_red_method=None)
+
+
+    # if show_plot:
+    fig1.show()
+    fig2.show()
+    fig3.show()
+    fig4.show()
+    fig5.show()
+    fig6.show()
+    fig7.show()
+    fig8.show()
+
