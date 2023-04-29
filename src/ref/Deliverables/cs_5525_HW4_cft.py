@@ -130,7 +130,7 @@ if __name__ == '__main__':
                                                                              y_train=y_train.copy(deep=True),
                                                                              x_test =x_test.copy(deep=True) ,
                                                                              y_test =y_test.copy(deep=True),
-                                                                             show=False)
+                                                                             show=True)
     print(f"Optimum parameters for Pre-Pruned Decision Tree Classifier :{best_params_pre_prune_tree}")
 
     # Make a prediction using the pre-pruned tree

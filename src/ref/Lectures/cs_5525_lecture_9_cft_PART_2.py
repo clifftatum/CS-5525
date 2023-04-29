@@ -10,7 +10,7 @@ pd.set_option("display.precision", 2)
 pd.options.display.float_format = "{:,.2f}".format
 
 if __name__ == '__main__':
-    eda = EDA('Clifford Tatum EDA Pruning for Dec Tree')
+    eda = EDA('Clifford Tatum exploratoryDataAnalysis Pruning for Dec Tree')
 
     pass
     from sklearn.datasets import load_breast_cancer

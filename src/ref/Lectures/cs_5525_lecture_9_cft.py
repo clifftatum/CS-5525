@@ -10,7 +10,7 @@ pd.set_option("display.precision", 2)
 pd.options.display.float_format = "{:,.2f}".format
 
 if __name__ == '__main__':
-    eda = EDA('Clifford Tatum EDA 1 Layer Neural Network (Essentially Logistic Regression) ')
+    eda = EDA('Clifford Tatum exploratoryDataAnalysis 1 Layer Neural Network (Essentially Logistic Regression) ')
     url = 'https://raw.githubusercontent.com/clifftatum/CS-5525-Term-Project/main/DELIVER_CS5525_term_dataset_cliffordt_Deflation_EcoEnv_Nov2022_Jan2023.csv'
     df = pd.read_csv(url)
     from sklearn.datasets import load_breast_cancer

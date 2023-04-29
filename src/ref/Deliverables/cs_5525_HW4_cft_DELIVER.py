@@ -871,19 +871,14 @@ class EDA:
             model = make_pipeline(
                 DecisionTreeClassifier()
             )
-            # param_grid = [{'max_depth': [1,2,3,4,5,6,7,8,9,10],
-            #                'min_samples_split': [1,2,3,4,5],
-            #                'min_samples_leaf': [1,2,3,4,5],
-            #                'max_features': [2,4,6,8,16,24,36],
-            #                'splitter': ['best', 'random'],
-            #                'criterion': ['gini', 'entropy', 'log_loss']}]
-
-            param_grid = [{'max_depth': [1, 2],
-                           'min_samples_split': [1, 2],
-                           'min_samples_leaf': [1, 2, ],
-                           'max_features': [2, 4, ],
+            param_grid = [{'max_depth': [1,2,3,4,5,6,7,8,9,10],
+                           'min_samples_split': [1,2,3,4,5],
+                           'min_samples_leaf': [1,2,3,4,5],
+                           'max_features': [2,4,6,8,16,24,36],
                            'splitter': ['best', 'random'],
                            'criterion': ['gini', 'entropy', 'log_loss']}]
+
+            # param_grid = [{'max_depth': [1, 2]}]
 
 
             dtc = DecisionTreeClassifier(random_state=123)
@@ -956,21 +951,27 @@ class EDA:
                 cm = confusion_matrix(Y, y_hat)
                 cr = classification_report(Y, y_hat)
 
+
+
                 # Plot ROC curve
                 traces.append(go.Scatter(x=fpr, y=tpr, mode='lines', name= meth+ ' (AUC = %0.2f)' % roc_auc))
 
 
                 # Plot confusion matrix
                 fig2 = go.Figure()
-                fig2.add_trace((go.Heatmap(colorbar=dict(title='Target: '+target_pred.split(' ')[-1]),z=cm,
+                fig2.add_trace((go.Heatmap(colorbar=dict(title='Target: '+target_pred.split(' ')[-1]),z=cm[::-1],
                                                x=['<b>Predicted Negative<b>', '<b>Predicted Positive<b>'],name= meth,
-                                               y=['<b>Actual Negative<b>', '<b>Actual Positive<b>'],colorscale='Jet')))
+                                               y=['<b>Actual Positive<b>', '<b>Actual Negative <b>'],colorscale='viridis')))
                 fig2.update_layout(title_text='<b>Confusion matrix: Classification Model = ' + meth + '<b>',
                                    xaxis_title='<b>Predicted label<b>',
                                    yaxis_title='<b>True label<b>')
                 fig2.update_yaxes(tickfont_family="Arial Black")
                 fig2.update_xaxes(tickfont_family="Arial Black")
                 fig2.show()
+                # from sklearn.metrics import ConfusionMatrixDisplay
+                # disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+                # disp.plot()
+                # plt.show()
 
                 # Plot the perfomance
                 f = px.bar(df, x=meth, y='Classifier Metrics:')
@@ -1102,39 +1103,39 @@ class EDA:
             # print(f"Last node in Decision tree is {clfs[-1].tree_.node_count}
             # and ccp_alpha for last node is {ccp_alphas[-1]}")
             tree_depths = [clf.tree_.max_depth for clf in clfs]
-            plt.figure(figsize=(10,  6))
-            plt.plot(ccp_alphas[:-1], tree_depths[:-1])
-            plt.xlabel("effective alpha")
-            plt.ylabel("total depth")
-            plt.title("Post-Pruned Tree")
+            # plt.figure(figsize=(10,  6))
+            # plt.plot(ccp_alphas[:-1], tree_depths[:-1])
+            # plt.xlabel("effective alpha")
+            # plt.ylabel("total depth")
+            # plt.title("Post-Pruned Tree")
 
             train_scores = [clf.score(x_train, y_train) for clf in clfs]
             test_scores = [clf.score(x_test, y_test) for clf in clfs]
-            fig, ax = plt.subplots()
-            ax.set_xlabel("alpha")
-            ax.set_ylabel("accuracy")
-            ax.set_title("Post-Pruned Tree Accuracy vs alpha for training and testing sets")
-            ax.plot(ccp_alphas, train_scores, marker='o', label="train",drawstyle="steps-post")
-            ax.plot(ccp_alphas, test_scores, marker='o', label="test",drawstyle="steps-post")
-            ax.legend()
+            # fig, ax = plt.subplots()
+            # ax.set_xlabel("alpha")
+            # ax.set_ylabel("accuracy")
+            # ax.set_title("Post-Pruned Tree Accuracy vs alpha for training and testing sets")
+            # ax.plot(ccp_alphas, train_scores, marker='o', label="train",drawstyle="steps-post")
+            # ax.plot(ccp_alphas, test_scores, marker='o', label="test",drawstyle="steps-post")
+            # ax.legend()
 
             acc_scores = [accuracy_score(y_test, clf.predict(x_test)) for clf in clfs]
             max_acc_ind = np.argmax(acc_scores)
             dtc_post_pruned_best_alpha = ccp_alphas[max_acc_ind]
             # tree_depths = [dtf.tree_.max_depth for dtf in clfs]
-            plt.figure(figsize=(10,  6))
-            plt.grid()
-            plt.plot(ccp_alphas[:-1], acc_scores[:-1])
-            plt.xlabel("effective alpha")
-            plt.ylabel("Accuracy scores")
+            # plt.figure(figsize=(10,  6))
+            # plt.grid()
+            # plt.plot(ccp_alphas[:-1], acc_scores[:-1])
+            # plt.xlabel("effective alpha")
+            # plt.ylabel("Accuracy scores")
 
             # The post Pruned tree
             dtc_post_pruned = DecisionTreeClassifier(random_state=123,ccp_alpha=dtc_post_pruned_best_alpha)
             dtc_post_pruned.fit(x_train,y_train)
-            plt.figure(figsize=(12,8))
-            tree.plot_tree(dtc_post_pruned,rounded=True,filled=True)
-            if show:
-                plt.show()
+            # plt.figure(figsize=(12,8))
+            # tree.plot_tree(dtc_post_pruned,rounded=True,filled=True)
+            # if show:
+            #     plt.show()
 
             return dtc_post_pruned_best_alpha, dtc_post_pruned
 

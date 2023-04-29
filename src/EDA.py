@@ -952,9 +952,9 @@ class EDA:
 
                 # Plot confusion matrix
                 fig2 = go.Figure()
-                fig2.add_trace((go.Heatmap(colorbar=dict(title='Target: '+target_pred.split(' ')[-1]),z=cm,
+                fig2.add_trace((go.Heatmap(colorbar=dict(title='Target: '+target_pred.split(' ')[-1]),z=cm[::-1],
                                                x=['<b>Predicted Negative<b>', '<b>Predicted Positive<b>'],name= meth,
-                                               y=['<b>Actual Negative<b>', '<b>Actual Positive<b>'],colorscale='Jet')))
+                                               y=['<b>Actual Positive<b>', '<b>Actual Negative <b>'],colorscale='viridis')))
                 fig2.update_layout(title_text='<b>Confusion matrix: Classification Model = ' + meth + '<b>',
                                    xaxis_title='<b>Predicted label<b>',
                                    yaxis_title='<b>True label<b>')
@@ -1044,19 +1044,19 @@ class EDA:
             model = make_pipeline(
                 DecisionTreeClassifier()
             )
-            param_grid = [{'max_depth': [1,2,3,4,5,6,7,8,9,10],
-                           'min_samples_split': [1,2,3,4,5],
-                           'min_samples_leaf': [1,2,3,4,5],
-                           'max_features': [2,4,6,8,16,24,36],
-                           'splitter': ['best', 'random'],
-                           'criterion': ['gini', 'entropy', 'log_loss']}]
-
-            # param_grid = [{'max_depth': [1, 2],
-            #                'min_samples_split': [1, 2],
-            #                'min_samples_leaf': [1, 2, ],
-            #                'max_features': [2, 4, ],
+            # param_grid = [{'max_depth': [1,2,3,4,5,6,7,8,9,10],
+            #                'min_samples_split': [1,2,3,4,5],
+            #                'min_samples_leaf': [1,2,3,4,5],
+            #                'max_features': [2,4,6,8,16,24,36],
             #                'splitter': ['best', 'random'],
             #                'criterion': ['gini', 'entropy', 'log_loss']}]
+
+            param_grid = [{'max_depth': [1, 2],
+                           'min_samples_split': [1, 2],
+                           'min_samples_leaf': [1, 2, ],
+                           'max_features': [2, 4, ],
+                           'splitter': ['best', 'random'],
+                           'criterion': ['gini', 'entropy', 'log_loss']}]
 
             dtc = DecisionTreeClassifier(random_state=123)
             # Search over the defined grid
