@@ -309,28 +309,30 @@ class ExploratoryDataAnalysis:
             m_dist[i] = sum_abs_raised ** (1 / L)
         return m_dist.reshape(len(m_dist), 1)
 
-    def test_null_hypothosis(self,X,y):
+    def test_null_hypothosis(self,X,y,method):
 
-        # # Kai Squared
-        # observed_freq = np.array([[np.sum((X == i) & (y == j)) for j in np.unique(y)] for i in np.unique(X)])
-        # chi2_statistic, p_value, dof, expected_freq = chi2_contingency(observed_freq)
-        #
-        # print("Chi-squared test results:")
-        # print("Chi-squared statistic = {:.3f}".format(chi2_statistic))
-        # print("p-value = {:.3f}".format(p_value))
 
-        # Perform ANOVA test
-        groups = [X[y == g] for g in np.unique(y)]
-        f_statistic, p_value = f_oneway(*groups)
+        if method =='ANOVA':
+            # Perform ANOVA test
+            groups = [X[y == g] for g in np.unique(y)]
+            f_statistic, p_value = f_oneway(*groups)
 
-        # print("ANOVA test results:")
-        # print(f"F-statistic = {f_statistic}")
-        # print(f"p-value = {p_value}")
+            df_res = pd.DataFrame(np.hstack((np.array(X.columns).reshape(-1,1),f_statistic.reshape(-1,1),p_value.reshape(-1,1))),
+                                  columns = ['Feature','F Statistic','P-value'])
+            ExploratoryDataAnalysis.to_pretty_table(self,dat=df_res, title='ANOVA Null Hypothesis Test Results', head=None)
 
-        df_res = pd.DataFrame(np.hstack((np.array(X.columns).reshape(-1,1),f_statistic.reshape(-1,1),p_value.reshape(-1,1))),
-                              columns = ['Feature','F Statistic','P-value'])
+        elif method == 't_test_f_test':
+            # T and F test
+            t_statistic, p_value = stats.ttest_ind(X, y)
+            groups = [X[y == g] for g in np.unique(y)]
+            f_statistic, p_value = f_oneway(*groups)
 
-        ExploratoryDataAnalysis.to_pretty_table(self,dat=df_res, title='ANOVA Null Hypothesis Test Results', head=None)
+            df_res = pd.DataFrame(np.hstack((np.array(X.columns).reshape(-1,1),f_statistic.reshape(-1,1),
+                                             t_statistic.reshape(-1,1),p_value.reshape(-1,1))),
+                                  columns = ['Feature','F Statistic','T Statistic','P-value'])
+            ExploratoryDataAnalysis.to_pretty_table(self,dat=df_res,
+                                    title='F-Test and T-Test Null Hypothesis Test Results', head=None)
+
 
         return df_res
 
@@ -768,9 +770,8 @@ class RegressionAnalysis:
             y_test[y_train.columns[0]] = le.fit_transform(y_test)
 
         # Compute the linear regression
-        model = sm.OLS(y_train, sm.add_constant(x_train)).fit()
-        # logreg = LogisticRegression(multi_class='multinomial', solver='lbfgs')
-        # model = logreg.fit(x_train, y_train)
+        model = sm.OLS(y_train, x_train).fit()
+
         fig = None
         if show:
             print(f'{dim_red_method} Model Summary: {model.summary2(float_format="%.3f")}')
@@ -802,6 +803,10 @@ class RegressionAnalysis:
             fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
             fig.update_xaxes(showgrid=True)
             fig.update_yaxes(showgrid=False)
+            fig.update_yaxes(tickfont_family="Arial Black")
+            fig.update_xaxes(tickfont_family="Arial Black")
+            # fig.update_layout(template="plotly_dark", font=dict(size=18))
+            fig.update_layout(font=dict(size=18))
             if title == None:
                 title_str = dim_red_method + ' Resultant Feature Space:  Predicted ' \
                             + Y.columns[0] + ' vs Actual ' + \
@@ -816,7 +821,7 @@ class RegressionAnalysis:
         return y_hat_model, x_test, fig
 
     def backward_linear_regression(self, x_train, y_train, x_test, y_test, compute_prediction, compute_method, show,
-                                   encode_target):
+                                   encode_target,req_num_feats):
 
         types = pd.DataFrame(y_train).dtypes.astype(str)
         obj_result = types.str.contains(pat='object').any()
@@ -841,7 +846,7 @@ class RegressionAnalysis:
                 prev_adj_R_squared = model.rsquared_adj
 
             # Compute the linear regression
-            model = sm.OLS(y_train, sm.add_constant(x_train)).fit()
+            model = sm.OLS(y_train, x_train).fit()
             if i == 0:
                 print(f'Initial model: {model.summary2(float_format="%.3f")}')
 
@@ -855,16 +860,22 @@ class RegressionAnalysis:
                 R_squared_rates.append(0)
 
             models.update({prev_adj_R_squared: model})
-            max_p_ind = np.argmax(model.pvalues.iloc[1:])
-            if np.max(model.pvalues.iloc[1:]) <= 0.05:  # if the max p-value is below the acceptable threshold , break
+            ps = model.pvalues[1:]
+
+            max_p_feat =max(dict(ps), key=dict(ps).get)
+
+            if np.max(ps) <= 0.05 or len(dropped_feats) == req_num_feats:  # if the max p-value is below the acceptable threshold , break
                 temp = x_train_init.drop(columns=dropped_feats)
                 potential_best_model = sm.OLS(y_train, temp).fit()
+                if len(temp.columns) == req_num_feats:
+                    break
+            if R_squared_rates[-1]<=-5:
                 break
             # Drop the feature with the highest p value
-            dropped_feats.append(x_train.columns[max_p_ind])
+            dropped_feats.append(max_p_feat)
             prev_msg_str = msg_str
             msg_str = 'Dropped: ' + str(dropped_feats)
-            x_train.drop(columns=x_train.columns[max_p_ind], inplace=True)
+            x_train.drop(columns=max_p_feat, inplace=True)
 
         # Drop the features
         x_train_init.drop(columns=dropped_feats, inplace=True)
@@ -894,7 +905,7 @@ class RegressionAnalysis:
                 x_test = x_test.drop(columns=dropped_feats)
                 # X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test)) \
                 X = sm.add_constant(x_test)
-                y_hat_model = model # .predict(exog=X)
+                y_hat_model = potential_best_model # .predict(exog=X)
                 y_hat = y_hat_model.predict(X)
                 MSE = mean_squared_error(Y, np.array(y_hat).reshape(-1, 1))
             if show:
@@ -911,11 +922,15 @@ class RegressionAnalysis:
                 fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
                 fig.update_xaxes(showgrid=True)
                 fig.update_yaxes(showgrid=False)
+                fig.update_yaxes(tickfont_family="Arial Black")
+                fig.update_xaxes(tickfont_family="Arial Black")
+                # fig.update_layout(template="plotly_dark", font=dict(size=18))
+                fig.update_layout(font=dict(size=18))
                 fig.update_layout(showlegend=True,
-                                  yaxis_title=Y.columns[0].split('_')[-1],
-                                  title_text='Backwards Linear Regression Resultant Feature Space: OLS_predicted_' +
+                                  yaxis_title='<b>'+Y.columns[0].split('_')[-1]+'<b>',
+                                  title_text='<b>Backwards Linear Regression Resultant Feature Space: OLS_predicted_' +
                                              Y.columns[0] + ' vs Actual ' +
-                                             Y.columns[0] + ': MSE = ' + str(MSE))
+                                             Y.columns[0] + ': MSE = ' + str(MSE)+'<b>')
             else:
                 fig = None
 
@@ -942,9 +957,13 @@ class RegressionAnalysis:
 
 
     def compare_regression_models(self, model_a, model_b, mod_a_distinct_method, mod_b_distinct_method, mod_a_res, mod_b_res,
-                           show_best,target_name):
+                           show,target_name):
+
+        models = [model_a, model_b]
+        results = [mod_a_res, mod_b_res]
+        methods = [mod_a_distinct_method, mod_b_distinct_method]
         df = pd.DataFrame()
-        df['Model Predictor Metrics:'] = ['AIC (minimize)', 'BIC (minimize)', 'Adj. R^2 (maximize)']
+        df['Model Predictor Metrics:'] = ['AIC (minimize)', 'BIC (minimize)', 'Adj. R^2 (maximize)','MSE (minimize)']
 
         mod_a_y_hat_name = mod_a_res.columns[np.where(np.array([i.find('OLS') for i in mod_a_res.columns]) == 0)]
         target_name_pred = mod_a_res[mod_a_y_hat_name].columns[0]
@@ -957,77 +976,54 @@ class RegressionAnalysis:
         Y = np.array(mod_b_res[target_name])
         MSE_B = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
 
-        df[mod_a_distinct_method] = [model_a.aic, model_a.bic, model_a.rsquared_adj]
-        df[mod_b_distinct_method] = [model_b.aic, model_b.bic, model_b.rsquared_adj]
+        df[mod_a_distinct_method] = [model_a.aic, model_a.bic, model_a.rsquared_adj,MSE_A]
+        df[mod_b_distinct_method] = [model_b.aic, model_b.bic, model_b.rsquared_adj,MSE_B]
 
         ExploratoryDataAnalysis.to_pretty_table(self,dat=df,
                              title='Dimensionality Reduction Metric Comparison',
                              head=None)
 
-        if show_best:
-            best_wrt_minimize_predictors = df.iloc[0:-1, 1:].idxmin(axis=1).unique()
-            r_squared_potential_best = ExploratoryDataAnalysis.slice_by_observation(self,df=df,
-                                                                 feature=best_wrt_minimize_predictors,
-                                                                 observations=['Adj. R^2 (maximize)'],
-                                                                 obs_by_feature=['Model Predictor Metrics:']).iloc[0, 0]
-            other_wrt_minimize_predictors = df.iloc[0:-1, 1:].idxmax(axis=1).unique()
-            r_squared_expected_worst = ExploratoryDataAnalysis.slice_by_observation(self,df=df,
-                                                                 feature=other_wrt_minimize_predictors,
-                                                                 observations=['Adj. R^2 (maximize)'],
-                                                                 obs_by_feature=['Model Predictor Metrics:']).iloc[0, 0]
-
-            if len(best_wrt_minimize_predictors) == 1 and len(other_wrt_minimize_predictors) == 1 and \
-                    r_squared_potential_best >= r_squared_expected_worst:
-                # if True:
-
-                rec_method_name = best_wrt_minimize_predictors
-                if rec_method_name == mod_a_distinct_method:
-                    rec_model = model_a
-                    rec_res = mod_a_res
-                # else:
-                #     rec_model = model_b
-                #     rec_res = mod_b_res
-                # Plot
-
+        if show:
+            df_predictions_set = []
+            figs = []
+            for rec_model, rec_res,rec_method_name in zip(models,results,methods):
                 fig = go.Figure()
                 predictions = rec_model.get_prediction()
                 df_predictions = predictions.summary_frame()
                 rec_res['n_observations'] = np.arange(1, len(rec_res) + 1).reshape(len(rec_res), 1)
 
-                fig.add_trace(go.Scatter(name="CI", x=rec_res.n_observations,
+                fig.add_trace(go.Scatter(name=None, x=rec_res.n_observations,
                                          y=df_predictions.obs_ci_lower.iloc[:],
                                          line=dict(color='rgba(0, 0, 255, 0.05)'),
-                                         fillcolor="#eaecee",
-                                         connectgaps=False,
+                                         fillcolor="#76EEC6",
+                                         connectgaps=False, showlegend=False
                                          ))
-                fig.add_trace(go.Scatter(name=None, x=rec_res.n_observations,
+                fig.add_trace(go.Scatter(name="Confidence Interval", x=rec_res.n_observations,
                                          y=df_predictions.obs_ci_upper.iloc[:],
                                          line=dict(color='rgba(0, 0, 255, 0.05)'),
                                          fill="tonexty",
-                                         fillcolor="#EAEDF8",
-                                         connectgaps=False, showlegend=False
+                                         fillcolor="#76EEC6",
+                                         connectgaps=False, showlegend=True
                                          ))
 
                 fig.add_trace(go.Scatter(name=target_name_pred, x=rec_res.n_observations,
                                          y=rec_res[target_name_pred],
                                          line=dict(color='blue')))
-                fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-                fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
-                fig.update_xaxes(showgrid=True)
-                fig.update_yaxes(showgrid=False)
+                # fig.update_xaxes(mirror=False, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+                # fig.update_yaxes(mirror=True, ticks='outside', showline=True, linecolor='black', gridcolor='lightgrey')
+                # fig.update_xaxes(showgrid=True)
+                # fig.update_yaxes(showgrid=False)
                 fig.update_yaxes(tickfont_family="Arial Black")
                 fig.update_xaxes(tickfont_family="Arial Black")
-                fig.update_layout(template="plotly_dark", font=dict(size=18))
+                # fig.update_layout(template="plotly_dark", font=dict(size=18))
+                fig.update_layout(font=dict(size=18))
                 fig.update_layout(showlegend=True,
-                                  yaxis_title=target_name_pred.split('_')[-1], xaxis_title='# of Samples',
-                                  title_text= rec_method_name[0] + 'Regression Results with Confidence Interval (CI) ')
-            else:
-                rec_method_name = None
-                rec_model = None
-                fig = None
-                print(f'WARNING: OLS predictors do not unanimously recommend a model, use inspection. ')
+                                  yaxis_title='<b>'+target_name_pred.split('_')[-1]+'<b>', xaxis_title='<b># of Samples<b>',
+                                  title_text='<b>'+ rec_method_name + ' - Regression Results with Confidence Interval (CI)<b> ')
+                figs.append(fig)
+                df_predictions_set.append(df_predictions)
 
-        return df, fig,df_predictions
+        return df, figs,df_predictions_set
 
 
 class ClassificationAnalysis:
