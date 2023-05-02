@@ -26,7 +26,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.linear_model import LogisticRegression
 from plotly.subplots import make_subplots
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor,RandomForestClassifier
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
 import statsmodels.api as sm
@@ -35,6 +35,7 @@ from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_rep
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier
+from sklearn.metrics import roc_auc_score
 
 from scipy import stats
 
@@ -887,20 +888,7 @@ class RegressionAnalysis:
                 print(f'Best Model Summary: {potential_best_model.summary2(float_format="%.3f")}')
 
             # Compute a prediction on the test data set
-            if compute_prediction and compute_method == 'manual':
-                # Manual
-                x_test = x_test.drop(columns=dropped_feats)
-                # X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test))
-                X = sm.add_constant(x_test)
-                Y = y_test
-                H = X.T @ X
-                Beta = np.linalg.inv(H) @ X.T @ Y
-                y_hat = X @ Beta  # here is B* or the predicition
-                e = np.array(Y) - np.array(y_hat)
-                SSE = e.T @ e
-                MSE = np.mean(e ** 2)
-
-            elif compute_prediction and compute_method == 'package':
+            if compute_prediction and compute_method == 'package':
                 # Using Package
                 Y = y_test
                 x_test = x_test.drop(columns=dropped_feats)
@@ -908,9 +896,6 @@ class RegressionAnalysis:
                 X = sm.add_constant(x_test)
                 y_hat_model = model # .predict(exog=X)
                 y_hat = y_hat_model.predict(X)
-                e = np.array(Y) - np.array(np.array(y_hat).reshape(len(y_hat), 1))
-                SSE = e.T @ e
-
                 MSE = mean_squared_error(Y, np.array(y_hat).reshape(-1, 1))
             if show:
                 # print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
@@ -956,7 +941,7 @@ class RegressionAnalysis:
 
 
 
-    def compare_dimens_reduct_methods(self, model_a, model_b, mod_a_distinct_method, mod_b_distinct_method, mod_a_res, mod_b_res,
+    def compare_regression_models(self, model_a, model_b, mod_a_distinct_method, mod_b_distinct_method, mod_a_res, mod_b_res,
                            show_best,target_name):
         df = pd.DataFrame()
         df['Model Predictor Metrics:'] = ['AIC (minimize)', 'BIC (minimize)', 'Adj. R^2 (maximize)']
@@ -1072,7 +1057,8 @@ class ClassificationAnalysis:
 
     @staticmethod
     def get_random_forest_classifier(x_train, y_train,fit):
-        clf = RandomForestRegressor(  random_state=1,
+        clf = RandomForestClassifier( random_state=1,
+                                      criterion='gini',
                                       max_depth=5,
                                       n_estimators=100)
         if fit:
@@ -1085,18 +1071,39 @@ class ClassificationAnalysis:
         if fit:
             clf = clf.fit(x_train, y_train)
         return clf
+    @staticmethod
+    def roc_auc_score_multiclass(actual_class, pred_class, average="macro"):
+        # creating a set of all the unique classes using the actual class list
+        unique_class = set(actual_class)
+        roc_auc_dict = {}
+        for per_class in unique_class:
+            # creating a list of all the classes except the current class
+            other_class = [x for x in unique_class if x != per_class]
+
+            # marking the current class as 1 and all other classes as 0
+            new_actual_class = [0 if x in other_class else 1 for x in actual_class]
+            new_pred_class = [0 if x in other_class else 1 for x in pred_class]
+
+            # using the sklearn metrics method to calculate the roc_auc_score
+            roc_auc = roc_auc_score(new_actual_class, new_pred_class, average=average)
+            roc_auc_dict[per_class] = roc_auc
+
+        return roc_auc_dict
+
 
     @staticmethod
-    def show_classification_models( models, methods, results, show):
+    def show_classification_models( models, methods, results,x_test,y_test, show,average):
 
         fig = None
         fig2 = None
+
         if show is None:
             show = False
 
         df = pd.DataFrame()
-        df['Classifier Metrics:'] = ['Accuracy (maximize)', 'Precision (maximize)', 'Recall (maximize)',
-                                     'F-Score (maximize)']
+        df['Classifier Metrics:'] = ['Accuracy (maximize)('+ average+')', 'Precision (maximize)('+ average+')',
+                                     'Recall (maximize)('+ average+')',
+                                     'F-Score (maximize)('+ average+')']
 
         traces = []
         c = 0
@@ -1108,45 +1115,52 @@ class ClassificationAnalysis:
             target_pred = res[pred_name].columns[0]
             y_hat = np.array(res[target_pred])
             Y = np.array(res[target_pred.split(' ')[-1]])
-            precision, recall, f_score, _ = precision_recall_fscore_support(Y, y_hat)
-            df[meth] = [accuracy_score(Y, y_hat), precision, recall, f_score]
+
+
+            # Evaluate the performance of the model
+            precision, recall, f_score, _ = precision_recall_fscore_support(Y, y_hat,average=average)
+            accuracy = accuracy_score(Y, y_hat)
+            df[meth] = [accuracy,precision, recall, f_score]
             cnf_matrix = confusion_matrix(Y, y_hat)
+            cnf_matrix = pd.DataFrame(cnf_matrix,columns = np.unique(y_hat))
+            roc_auc_dict = ClassificationAnalysis().roc_auc_score_multiclass(Y, y_hat,average = average)
 
             if show:
-                # Predict probabilities of positive class for test set
-                probas = mod.predict_proba(res.iloc[:, :-3])[:, 1]
 
-                # Compute ROC curve and AUC
-                fpr, tpr, thresholds = roc_curve(Y, probas)
-                roc_auc = auc(fpr, tpr)
-
-                # Compute confusion matrix and classification report
-                # y_hat = mod.predict(res.iloc[:,:-3])
-                cm = confusion_matrix(Y, y_hat)
                 cr = classification_report(Y, y_hat)
 
                 # Plot ROC curve
-                traces.append(go.Scatter(x=fpr, y=tpr, mode='lines', name=meth + ' (AUC = %0.2f)' % roc_auc))
-
-                # Plot confusion matrix
-                fig2 = go.Figure()
-                fig2.add_trace((go.Heatmap(colorbar=dict(title='Target: ' + target_pred.split(' ')[-1]), z=cm[::-1],
-                                           x=['<b>Predicted Negative<b>', '<b>Predicted Positive<b>'], name=meth,
-                                           y=['<b>Actual Positive<b>', '<b>Actual Negative <b>'],
-                                           colorscale='viridis',text=cm[::-1],
-                                            texttemplate="%{text}",
-                                            textfont={"size":20})))
+                # traces.append(go.Scatter(x=fpr, y=tpr, mode='lines', name=meth + ' (AUC = %0.2f)' % roc_auc))
 
 
+                labs = np.unique(y_hat)
+                import plotly.figure_factory as ff
+                z_text = [[str(y) for y in x] for x in cnf_matrix]
+                fig2 = ff.create_annotated_heatmap(cnf_matrix[::-1].values,
+                                                  x=['(predicted) '+ lab for lab in labs],
+                                                  y=['(actual) '+ lab for lab in np.flip(labs)],
+                                                  # annotation_text=str(cnf_matrix.values),
+                                                  colorscale='YlGnBu')
+                fig2['data'][0]['showscale'] = True
                 fig2.update_layout(title_text='<b>Confusion matrix: Classification Model = ' + meth + '<b>',
-                                   xaxis_title='<b>Predicted label<b>',
-                                   yaxis_title='<b>True label<b>')
+                                   margin=dict(l=80, r=80, t=100, b=80)
+                                   )
                 fig2.update_yaxes(tickfont_family="Arial Black")
-                fig2.update_xaxes(tickfont_family="Arial Black")
-                # fig.update_yaxes(tickfont_family="Arial Black")
-                # fig.update_xaxes(tickfont_family="Arial Black")
+                fig2.update_xaxes(tickfont_family="Arial Black",side="bottom")
+                fig.update_layout(xaxis_title='<b>Predicted label<b>',
+                                  yaxis_title='<b>Actual label<b>')
                 fig2.update_layout(template="plotly_dark",font=dict(size=18))
+                fig2.update_yaxes(scaleanchor="x", scaleratio=1)
+                # add custom xaxis title
                 # fig2.show()
+                # import seaborn as sns
+                # sns.heatmap(cnf_matrix, annot=True, cmap="YlGnBu", fmt='g',
+                #             xticklabels=np.unique(y_hat),
+                #             yticklabels=np.unique(y_hat))
+                # plt.ylabel('Actual label')
+                # plt.xlabel('Predicted label')
+                # plt.tight_layout()
+                # plt.show()
 
                 # # Plot the perfomance
                 # f = px.bar(df, x=meth, y='Classifier Metrics:')

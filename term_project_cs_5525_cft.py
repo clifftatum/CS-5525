@@ -204,21 +204,36 @@ if __name__ == '__main__':
     # very co-linear.
 
 
-    # Split the Dataset to train and test (80%-20%) with shuffle=False
+    # Split the Dataset to train and test (80%-20%) with Shuffle=False
     x_train,x_test,y_train,y_test = eda.split_80_20(df=df.copy(deep=True),
                                                     target=target_name)
 
-    # Backward Linear Regression dimensionality reduction
-    _,_,_,drop_these_blr = ra.backward_linear_regression( x_train = x_train.copy(deep=True),
-                                                                 y_train = y_train.copy(deep=True),
-                                                                 x_test = x_test.copy(deep=True),
-                                                                 y_test = y_test.copy(deep=True),
-                                                                 compute_prediction=True,
-                                                                 compute_method='package',
-                                                                 show=True,
-                                                                 encode_target=True)
 
-    # Confidence Interval Analysis Random Forest Analysis vs Backward Linear Regression
+
+    # Final Regression Confidence Interval Analysis for Dependant Variable: Bollinger BandWidth
+    # Get a new Train/Test Dataset with Target='BandWidth'
+    # Split the Dataset to train and test (80%-20%) with Shuffle=False
+    x_train_reg,x_test_reg,y_train_reg,y_test_reg = eda.split_80_20(df=df.copy(deep=True).drop(columns=
+                                                                                               ['target_buy_sell_performance'],
+                                                                                               inplace=True),
+                                                                    target='BandWidth')
+
+    # Backward Linear Regression dimensionality reduction
+    linear_reg_model_blr, results_lin_reg_blr, fig, drop_these_blr = \
+    ra.backward_linear_regression(   x_train = x_train_reg.copy(deep=True),
+                                     y_train = y_train_reg.copy(deep=True),
+                                     x_test = x_test_reg.copy(deep=True),
+                                     y_test = y_test_reg.copy(deep=True),
+                                     compute_prediction=True,
+                                     compute_method='package',
+                                     show=True,
+                                     encode_target=False)
+
+
+
+
+    # Compare the Regression Results for 2 seperate dimensionailty reduction methods:
+    # Random Forest Analysis vs Backward Linear Regression
     OLS_model_RFA,results_RFA,_ = ra.drop_and_show_regression_results(x_train=x_train.copy(deep=True),
                                                                       y_train=y_train.copy(deep=True),
                                                                       x_test=x_test.copy(deep=True),
@@ -240,11 +255,11 @@ if __name__ == '__main__':
 
 
 
-    df_final_res, fig6,df_predictions = ra.compare_dimens_reduct_methods(model_a=OLS_model_BLR, model_b=OLS_model_RFA,
-                                                                         mod_a_distinct_method='Backward Linear Regression',
-                                                                         mod_b_distinct_method='Random Forest Analysis',
-                                                                         mod_a_res=results_BLR, mod_b_res=results_RFA,
-                                                                         show_best=True, target_name=target_name)
+    df_final_res, fig6,df_predictions = ra.compare_regression_models(model_a=OLS_model_BLR, model_b=OLS_model_RFA,
+                                                                     mod_a_distinct_method='Backward Linear Regression',
+                                                                     mod_b_distinct_method='Random Forest Analysis',
+                                                                     mod_a_res=results_BLR, mod_b_res=results_RFA,
+                                                                     show_best=True, target_name=target_name)
     fig_pack.append(fig6)
 
     ####################################################################################################################
@@ -255,6 +270,9 @@ if __name__ == '__main__':
     x_train.drop(columns=drop_these_blr, inplace=True)
 
 
+    ##################################
+    # 'Full' Decision Tree Classifier
+    ##################################
     # Create a 'Full' Decision Tree Classifier - no pruning
     full_dtc = ca.get_decision_tree_classifier(x_train=x_train.copy(deep=True),
                                                y_train=y_train.copy(deep=True),
@@ -262,39 +280,40 @@ if __name__ == '__main__':
 
     # Convert the Full Decision Tree Classifier Model to a One Versus All multi-label classifier
     full_dtc_ova_fitted = ca.to_one_vs_all(full_dtc,x_train=x_train.copy(deep=True),
-                                               y_train=y_train.copy(deep=True),
-                                               fit = True)
+                                                   y_train=y_train.copy(deep=True),
+                                                   fit = True)
 
     # Convert the Full Decision Tree Classifier Model to a One Versus One multi-label classifier
     full_dtc_ovo_fitted = ca.to_one_vs_one(full_dtc,x_train=x_train.copy(deep=True),
-                                               y_train=y_train.copy(deep=True),
-                                               fit = True)
+                                                   y_train=y_train.copy(deep=True),
+                                                   fit = True)
 
+    ##################################
+    # Random Forest Tree
+    ##################################
     # Create a Random Forest Classifier
-    rfc_fitted = ca.get_random_forest_classifier(x_train=x_train.copy(deep=True),
-                                               y_train=y_train.copy(deep=True),
-                                               fit = True)
+    rfc = ca.get_random_forest_classifier( x_train=x_train.copy(deep=True),
+                                           y_train=y_train.copy(deep=True),
+                                           fit = False)
 
     # Convert the Random Forest Classifier Model to a One Versus One multi-label classifier
-    rfc_ovo_fitted = ca.to_one_vs_one(model=rfc_fitted,
+    rfc_ovo_fitted = ca.to_one_vs_one( model=rfc,
                                        x_train=x_train.copy(deep=True),
                                        y_train=y_train.copy(deep=True),
                                        fit=True)
 
     # Convert the Random Forest Classifier Model to a One Versus All multi-label classifier
-    rfc_ova_fitted = ca.to_one_vs_all(model=rfc_fitted,
+    rfc_ova_fitted = ca.to_one_vs_all( model=rfc,
                                        x_train=x_train.copy(deep=True),
                                        y_train=y_train.copy(deep=True),
                                        fit=True)
 
-
-
-
-
-
+    ####################################################
+    # Make Predictions for each of the classifiers
+    ####################################################
 
     # Make a prediction using the full tree  - One Versus all Classification
-    results_dtc_full_tree_ova, _ = ca.predict_fitted_model( fitted_model=full_dtc_ova_fitted,
+    results_dtc_full_tree_ova, _ = ca.predict_fitted_model(    fitted_model=full_dtc_ova_fitted,
                                                                x_test=x_test.copy(deep=True),
                                                                y_test=y_test.copy(deep=True),
                                                                compute_prediction=True,
@@ -303,7 +322,7 @@ if __name__ == '__main__':
                                                                dim_red_method='Backward Linear Regression')
 
     # Make a prediction using the full tree  - One Versus One Classification
-    results_dtc_full_tree_ovo, _ = ca.predict_fitted_model( fitted_model=full_dtc_ovo_fitted,
+    results_dtc_full_tree_ovo, _ = ca.predict_fitted_model(    fitted_model=full_dtc_ovo_fitted,
                                                                x_test=x_test.copy(deep=True),
                                                                y_test=y_test.copy(deep=True),
                                                                compute_prediction=True,
@@ -311,22 +330,51 @@ if __name__ == '__main__':
                                                                title=None,
                                                                dim_red_method='Backward Linear Regression')
 
+    # Make a prediction using the Random Forest Classifier - One Versus all Classification
+    results_rfc_ova, _ = ca.predict_fitted_model(  fitted_model=rfc_ova_fitted,
+                                                   x_test=x_test.copy(deep=True),
+                                                   y_test=y_test.copy(deep=True),
+                                                   compute_prediction=True,
+                                                   show=False,
+                                                   title=None,
+                                                   dim_red_method='Backward Linear Regression')
 
+    # Make a prediction using the Random Forest Classifier  - One Versus One Classification
+    results_rfc_ovo, _ = ca.predict_fitted_model(  fitted_model=rfc_ovo_fitted,
+                                                   x_test=x_test.copy(deep=True),
+                                                   y_test=y_test.copy(deep=True),
+                                                   compute_prediction=True,
+                                                   show=False,
+                                                   title=None,
+                                                   dim_red_method='Backward Linear Regression')
 
+    ####################################################
+    # Show the performance for each of the classifiers
+    ####################################################
 
+    models = [full_dtc_ova_fitted,
+              full_dtc_ovo_fitted,
+              rfc_ova_fitted,
+              rfc_ovo_fitted]
 
+    mod_dist_meths = ['Full Decision Classifier Tree (One vs. All)',
+                      'Full Decision Classifier Tree (One vs. One)',
+                      'Random Forest Classifier Tree (One vs. All)',
+                      'Random Forest Classifier Tree (One vs. One)']
 
-
-
-    # models = [full_dtc_ova_fitted,full_dtc_ovo_fitted]
-    # mod_dist_meths = ['Full Decision Classifier Tree (One vs. All)','Full Decision Classifier Tree (One vs. One)']
-    # mod_res = [results_dtc_full_tree_ova,results_dtc_full_tree_ovo]
+    mod_res = [results_dtc_full_tree_ova,
+               results_dtc_full_tree_ovo,
+               results_rfc_ova,
+               results_rfc_ovo]
 
     # Compare the Classifiers # TODO, the metrics are delivered currently for binary lable classifiers, fix this!
-    # df_metrics_full_dtc,rec_model,rec_res = ca.show_classification_models(models=models,
-    #                                                               methods=mod_dist_meths,
-    #                                                               results=mod_res,
-    #                                                               show=False)
+    df_metrics_full_dtc,rec_model,rec_res = ca.show_classification_models(models=models,
+                                                                  methods=mod_dist_meths,
+                                                                  results=mod_res,
+                                                                  x_test=x_test.copy(deep=True),
+                                                                  y_test=y_test.copy(deep=True),
+                                                                  show=True,
+                                                                  average = 'macro')
 
 
 

@@ -12,6 +12,14 @@ pd.set_option("display.precision", 3)
 pd.options.display.float_format = "{:,.2f}".format
 
 if __name__ == '__main__':
+
+    import scipy
+    y = np.array([2 ,4 ,5 ,4 ,5])
+    y_hat = np.array([2.8 ,3.4 ,4 ,4.6 ,5.2])
+    corr = np.corrcoef(y,y_hat)
+    slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(y, y_hat)
+
+
     eda = EDA('Clifford Tatum Lab 4 - CS-5525')
     url = 'https://raw.githubusercontent.com/rjafari979/Information-Visualization-Data-Analytics-Dataset-/main/Carseats.csv'
     df = pd.read_csv(url)
