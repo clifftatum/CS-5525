@@ -4,9 +4,14 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeClassifier
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from sklearn.metrics import recall_score
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
+import scipy.stats as st
 from sklearn.tree import DecisionTreeClassifier
 import pandas as pd
+from sklearn.svm import SVC
 from mlxtend.frequent_patterns import apriori
 from mlxtend.frequent_patterns import association_rules
 from sklearn.preprocessing import LabelEncoder
@@ -36,7 +41,6 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier
 from sklearn.metrics import roc_auc_score
-
 from scipy import stats
 
 np.random.seed(5525)
@@ -257,7 +261,7 @@ class ExploratoryDataAnalysis:
         df_norm = pd.DataFrame(x_norm_mat, columns=df_norm_columns)
         return df_norm
 
-    def detect_and_remove_outliers(self,df,method ='LOF'):
+    def detect_and_remove_outliers(self,df,method ='1ClassSVM'):
 
         # Extract features
         features = df.columns
@@ -265,26 +269,43 @@ class ExploratoryDataAnalysis:
         if method == 'LOF':
             lof = LocalOutlierFactor(n_neighbors=20, contamination=0.1)
             y_hat = lof.fit_predict(X)
+            keep_ind = np.where(y_hat == 1)[0]
+            return keep_ind, (1-(len(keep_ind) / len(df))) * 100,df
+
         elif method == '1ClassSVM':
-            y_hat = OneClassSVM(nu=0.01).fit_predict(X)
+            y_hat = OneClassSVM(nu=0.1).fit_predict(X)
+            keep_ind = np.where(y_hat == 1)[0]
+            return keep_ind, (1-(len(keep_ind) / len(df))) * 100,df
 
+        elif method == 'z_score':
+            old_len = len(df)
+            # df = df[(np.abs(stats.zscore(df)) < 3).all()]
+            df_new = pd.DataFrame(columns=df.columns)
+            remove_list = []
+            for column in df.columns:
+                z_scores = (df[column] - df[column].mean()) / df[column].std()
+                # Identify rows where the absolute z score is greater than 3
+                outlier_indices = z_scores.abs() > 2
+                remove_list = np.hstack((np.array(remove_list).flatten(),np.array(np.where(outlier_indices==True)).flatten()))
+            keep_ind = np.array(list(set(np.arange(0,old_len)) - set(np.unique(remove_list))))
+            return keep_ind,(1-(len(keep_ind) / len(df)))*100,df
 
-        keep_ind = np.where(y_hat == 1)[0]
-        return keep_ind, (1-(len(keep_ind) / len(df))) * 100
-        # filter outliers
-        # X_filtered = X[y_hat == 1]
-        # Create scatter plot with outliers highlighted
-        # fig = px.scatter(df, x='feature1', y='feature2', color=y_hat, title='Outlier Detection')
-        # fig.show()
-        #
-        # # Create scatter plot of filtered data
-        # fig_filtered = px.scatter(pd.DataFrame(X_filtered, columns=features), x='feature1', y='feature2', title='Filtered Data')
-        # fig_filtered.show()
-        #
-        # percent_detected_and_removed =(1-(len(df[filtered_entries])/len(df)))*100
-        # return df_father[filtered_entries], percent_detected_and_removed
-
-
+    def show_count(self,df,target):
+        # Show the classification target label distribution
+        pd.options.plotting.backend = "plotly"
+        fig = df[target].value_counts().plot(kind='bar')
+        fig.update_yaxes(type="log")
+        fig.layout.bargap = 0
+        fig.update_xaxes(showgrid=True, tickvals=np.arange(0, df.shape[1] + 1), )
+        fig.update_yaxes(showgrid=False)
+        fig.update_yaxes(tickfont_family="Arial Black")
+        fig.update_xaxes(tickfont_family="Arial Black")
+        fig.update_layout(template="plotly_dark", font=dict(size=18))
+        fig.update_layout(showlegend=True,
+                          xaxis_title='<b>Unique Labels<b>',
+                          yaxis_title='<b>Number of Instances<b>',
+                          title_text='<b>Classification Target Count <b>')
+        return fig
 
     def standardize(self, df):
         from sklearn.preprocessing import StandardScaler
@@ -321,17 +342,17 @@ class ExploratoryDataAnalysis:
                                   columns = ['Feature','F Statistic','P-value'])
             ExploratoryDataAnalysis.to_pretty_table(self,dat=df_res, title='ANOVA Null Hypothesis Test Results', head=None)
 
-        elif method == 't_test_f_test':
+        elif method == 't_test':
             # T and F test
             t_statistic, p_value = stats.ttest_ind(X, y)
-            groups = [X[y == g] for g in np.unique(y)]
-            f_statistic, p_value = f_oneway(*groups)
+            # groups = [X[y == g] for g in np.unique(y)]
+            # f_statistic, p_value = f_oneway(*groups)
 
-            df_res = pd.DataFrame(np.hstack((np.array(X.columns).reshape(-1,1),f_statistic.reshape(-1,1),
+            df_res = pd.DataFrame(np.hstack((np.array(X.columns).reshape(-1,1),
                                              t_statistic.reshape(-1,1),p_value.reshape(-1,1))),
-                                  columns = ['Feature','F Statistic','T Statistic','P-value'])
+                                  columns = ['Feature','T Statistic','P-value'])
             ExploratoryDataAnalysis.to_pretty_table(self,dat=df_res,
-                                    title='F-Test and T-Test Null Hypothesis Test Results', head=None)
+                                    title='T-Test Null Hypothesis Test Results', head=None)
 
 
         return df_res
@@ -617,36 +638,37 @@ class ExploratoryDataAnalysis:
         diff.append(value)
         return np.array(diff).reshape(len(diff), 1)
 
-    def random_forest_analysis(self, X, y, plot_type, title, max_features):
-
-        model = RandomForestRegressor(random_state=1,
-                                      max_depth=5,
-                                      n_estimators=100)
+    def random_forest_analysis(self, X, y, plot_type, title, max_features,n_most_important):
 
         types = pd.DataFrame(y).dtypes.astype(str)
         obj_result = types.str.contains(pat='object').any()
         if obj_result:
-            # y = pd.DataFrame(y)
-            # y['rank'] = None
-            # for index, row in y.iterrows():
-            #     y['rank'][index] = rank_list.index(row['target_buy_sell_performance'])
-            # y = y['rank']
-            # Label encode categorical response variable
-            le = LabelEncoder()
-            y = le.fit_transform(y)
+            model = RandomForestClassifier(random_state=1,
+                                         criterion='gini',
+                                         max_depth=5,
+                                         n_estimators=100)
+
+        else:
+            model = RandomForestRegressor(random_state=1,
+                                          max_depth=5,
+                                          n_estimators=100)
 
         model.fit(X, y)
 
         features = X.columns
         importance = model.feature_importances_
-        indices = np.argsort(importance) # show all
+        indices = np.flip(np.argsort(importance)) # show all
 
         keep_features = [features[i] for i in indices]
         remove_features = list(set(features) - set(keep_features))
 
-        indices = np.argsort(importance)[:max_features]  # show all
-        keep_features = [features[i] for i in indices]
-        would_remove_features = list(set(features) - set(keep_features))
+
+        indices_keep = np.flip(np.argsort(importance))[:max_features]  # show all
+        would_remove_features = list(set(features) - set([features[i] for i in indices_keep]))
+
+        most_subset = None
+        if n_most_important is not None:
+            most_subset = keep_features[:n_most_important]
 
         # Show the dropped features
         # self.to_pretty_table(dat = dropped_feats,title='Dropped Features:',head='None')
@@ -663,20 +685,21 @@ class ExploratoryDataAnalysis:
             plt.tight_layout()
             fig = plt.gcf()
         elif plot_type == 'plotly':
-            fig = px.bar(range(len(indices)), importance[indices], orientation='h')
+            fig = px.bar(range(len(indices)), np.flip(importance[indices]), orientation='h')
 
             fig.update_layout(xaxis_title="Relative Importance",
                               yaxis=dict(
                                   tickvals=np.arange(0, len(indices)),
-                                  ticktext=[features[i] for i in indices]),
+                                  ticktext=[features[i] for i in np.flip(indices)]),
                               showlegend=True,
                               title_text=title,
                               )
             fig.update_yaxes(tickfont_family="Arial Black")
             fig.update_xaxes(tickfont_family="Arial Black")
-            fig.update_layout(template="plotly_dark",font=dict(size=12))
 
-            return fig, would_remove_features
+            fig.update_layout(template="plotly_dark",font=dict(size=18))
+
+            return fig, would_remove_features,most_subset
 
     def show_hbar(self, df, x_feat, y_feat, by_leg_category):
         fig = px.bar(df, x=x_feat, y=y_feat, color=by_leg_category, orientation='h')
@@ -714,7 +737,8 @@ class ExploratoryDataAnalysis:
         df_quant_feat = self.get_numerical_features(df).columns
         df_all = df.columns
         df_qual_feat = [ele for ele in df_all if ele not in df_quant_feat ]
-        df_qual_feat = [l for l in df_qual_feat if l not in not_features ]
+        if not_features is not None:
+            df_qual_feat = [l for l in df_qual_feat if l not in not_features ]
         final_df = df
         count_new_columns = 0
 
@@ -738,14 +762,23 @@ class ExploratoryDataAnalysis:
                                        len(final_df.columns) - (count_new_columns) + count_new_columns)
         return final_df, ind_to_standardize,encoded_feat_names
 
-    def split_80_20(self, df, target):
+    def split_80_20(self, df, target,stratify = None):
         y = pd.DataFrame(df[target], columns=[target])
         df.drop(columns=target, inplace=True)
 
-        x_train, x_test, y_train, y_test = train_test_split(df, y,
-                                                            test_size=0.2,
-                                                            random_state=1,
-                                                            shuffle=False)  # False if using temporal data
+
+        if stratify is not None:
+            x_train, x_test, y_train, y_test = train_test_split(df, y,
+                                                                test_size=0.2,
+                                                                random_state=1,
+                                                                stratify = y)  # False if using temporal data
+        else:
+            x_train, x_test, y_train, y_test = train_test_split(df, y,
+                                                                test_size=0.2,
+                                                                random_state=1,
+                                                                shuffle=False)  # False if using temporal data
+
+
         return x_train, x_test, y_train, y_test
 
 
@@ -761,14 +794,6 @@ class RegressionAnalysis:
         if dropped_feats is not None:
             x_train.drop(columns=dropped_feats, axis=1, inplace=True)
 
-        types = pd.DataFrame(y_train).dtypes.astype(str)
-        obj_result = types.str.contains(pat='object').any()
-        if obj_result:
-            # Label encode categorical response variable
-            le = LabelEncoder()
-            y_train[y_train.columns[0]] = le.fit_transform(y_train)
-            y_test[y_train.columns[0]] = le.fit_transform(y_test)
-
         # Compute the linear regression
         model = sm.OLS(y_train, x_train).fit()
 
@@ -776,20 +801,16 @@ class RegressionAnalysis:
         if show:
             print(f'{dim_red_method} Model Summary: {model.summary2(float_format="%.3f")}')
             if compute_prediction and compute_method == 'package':
-                # Compute a prediction on the test data set
+
                 # Using Package
                 Y = y_test
                 if dropped_feats is not None:
                     x_test = x_test.drop(columns=dropped_feats)
-                # X = sm.add_constant(x_test)
-                y_hat_model = sm.OLS(Y, x_test).fit()
-                # y_hat_model = model
-                y_hat = y_hat_model.predict(x_test)
-                # Decode predicted labels
-                # y_hat = le.inverse_transform(y_hat)
+                X = sm.add_constant(x_test)
+                y_hat_model = model
+                y_hat = y_hat_model.predict(X)
                 MSE = mean_squared_error(np.array(Y), np.array(y_hat).reshape(len(y_hat), 1))
 
-            # print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
             # Plot
             x_test[Y.columns[0]] = Y
             x_test['Observations'] = np.arange(1, len(x_test) + 1).reshape(len(x_test), 1)
@@ -805,24 +826,31 @@ class RegressionAnalysis:
             fig.update_yaxes(showgrid=False)
             fig.update_yaxes(tickfont_family="Arial Black")
             fig.update_xaxes(tickfont_family="Arial Black")
-            # fig.update_layout(template="plotly_dark", font=dict(size=18))
+            fig.update_layout(font=dict(size=18))
             fig.update_layout(font=dict(size=18))
             if title == None:
                 title_str = dim_red_method + ' Resultant Feature Space:  Predicted ' \
                             + Y.columns[0] + ' vs Actual ' + \
                             Y.columns[0] + ': MSE = ' + str(MSE)
             else:
-                title_str = title
+                title_str = '<b>' + title + '<b>'
+                # title_str =  title
+
+            # fig.update_layout(showlegend=True,
+            #                   title_text=title_str,
+            #                   yaxis_title='<b>' + Y.columns[0] + '<b>')
 
             fig.update_layout(showlegend=True,
                               title_text=title_str,
-                              yaxis_title=Y.columns[0])
+                              yaxis_title='<b>'+ Y.columns[0]+ '<b>',
+                              xaxis_title = '<b> # of Observations <b>')
+
 
         return y_hat_model, x_test, fig
 
     def backward_linear_regression(self, x_train, y_train, x_test, y_test, compute_prediction, compute_method, show,
                                    encode_target,req_num_feats):
-
+        req_num_feats+=1
         types = pd.DataFrame(y_train).dtypes.astype(str)
         obj_result = types.str.contains(pat='object').any()
         if encode_target and obj_result:
@@ -903,11 +931,11 @@ class RegressionAnalysis:
                 # Using Package
                 Y = y_test
                 x_test = x_test.drop(columns=dropped_feats)
-                # X = np.hstack((np.ones(len(x_test)).reshape(len(x_test), 1), x_test)) \
                 X = sm.add_constant(x_test)
                 y_hat_model = potential_best_model # .predict(exog=X)
                 y_hat = y_hat_model.predict(X)
                 MSE = mean_squared_error(Y, np.array(y_hat).reshape(-1, 1))
+
             if show:
                 # print(f' The mean squared error of the OLS model against the test data is {MSE:.3f}')
 
@@ -928,9 +956,8 @@ class RegressionAnalysis:
                 fig.update_layout(font=dict(size=18))
                 fig.update_layout(showlegend=True,
                                   yaxis_title='<b>'+Y.columns[0].split('_')[-1]+'<b>',
-                                  title_text='<b>Backwards Linear Regression Resultant Feature Space: OLS_predicted_' +
-                                             Y.columns[0] + ' vs Actual ' +
-                                             Y.columns[0] + ': MSE = ' + str(MSE)+'<b>')
+                                  xaxis_title='<b> # of Observations <b>',
+                                  title_text='<b>Backwards Linear Regression Results <b>')
             else:
                 fig = None
 
@@ -963,25 +990,24 @@ class RegressionAnalysis:
         results = [mod_a_res, mod_b_res]
         methods = [mod_a_distinct_method, mod_b_distinct_method]
         df = pd.DataFrame()
-        df['Model Predictor Metrics:'] = ['AIC (minimize)', 'BIC (minimize)', 'Adj. R^2 (maximize)','MSE (minimize)']
+        df['Model Predictor Metrics:'] = ['AIC (minimize)', 'BIC (minimize)',
+                                          'Adj. R^2 (maximize)','MSE (minimize)',
+                                          '95% Confidence Interval (+/-)']
 
         mod_a_y_hat_name = mod_a_res.columns[np.where(np.array([i.find('OLS') for i in mod_a_res.columns]) == 0)]
         target_name_pred = mod_a_res[mod_a_y_hat_name].columns[0]
         y_hat = np.array(mod_a_res[mod_a_y_hat_name])
-        Y = np.array(mod_a_res[target_name])
-        MSE_A = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
+        Y_a = np.array(mod_a_res[target_name])
+        e_a = Y_a-y_hat.reshape(len(y_hat), 1)
+        MSE_A = mean_squared_error(Y_a, y_hat.reshape(len(y_hat), 1))
 
         mod_b_y_hat_name = mod_b_res.columns[np.where(np.array([i.find('OLS') for i in mod_b_res.columns]) == 0)]
         y_hat = np.array(mod_b_res[mod_b_y_hat_name])
-        Y = np.array(mod_b_res[target_name])
-        MSE_B = mean_squared_error(Y, y_hat.reshape(len(y_hat), 1))
+        Y_b = np.array(mod_b_res[target_name])
+        e_b = Y_b - y_hat.reshape(len(y_hat), 1)
+        MSE_B = mean_squared_error(Y_b, y_hat.reshape(len(y_hat), 1))
 
-        df[mod_a_distinct_method] = [model_a.aic, model_a.bic, model_a.rsquared_adj,MSE_A]
-        df[mod_b_distinct_method] = [model_b.aic, model_b.bic, model_b.rsquared_adj,MSE_B]
 
-        ExploratoryDataAnalysis.to_pretty_table(self,dat=df,
-                             title='Dimensionality Reduction Metric Comparison',
-                             head=None)
 
         if show:
             df_predictions_set = []
@@ -994,7 +1020,7 @@ class RegressionAnalysis:
 
                 fig.add_trace(go.Scatter(name=None, x=rec_res.n_observations,
                                          y=df_predictions.obs_ci_lower.iloc[:],
-                                         line=dict(color='rgba(0, 0, 255, 0.05)'),
+                                         line=dict(color='rgba(0, 155, 255, 0.1)'),
                                          fillcolor="#76EEC6",
                                          connectgaps=False, showlegend=False
                                          ))
@@ -1018,10 +1044,23 @@ class RegressionAnalysis:
                 # fig.update_layout(template="plotly_dark", font=dict(size=18))
                 fig.update_layout(font=dict(size=18))
                 fig.update_layout(showlegend=True,
-                                  yaxis_title='<b>'+target_name_pred.split('_')[-1]+'<b>', xaxis_title='<b># of Samples<b>',
+                                  yaxis_title='<b>'+target_name_pred.split('_')[-1]+'<b>', xaxis_title='<b># of Observations<b>',
                                   title_text='<b>'+ rec_method_name + ' - Regression Results with Confidence Interval (CI)<b> ')
                 figs.append(fig)
                 df_predictions_set.append(df_predictions)
+                if rec_method_name == mod_a_distinct_method:
+                    CI_A = round(np.mean(abs(df_predictions.obs_ci_upper.iloc[:]-df_predictions.obs_ci_lower.iloc[:]))/2)
+                else:
+                    CI_B = round(np.mean(abs(df_predictions.obs_ci_upper.iloc[:]-df_predictions.obs_ci_lower.iloc[:]))/2)
+
+
+
+        df[mod_a_distinct_method] = [model_a.aic, model_a.bic, model_a.rsquared_adj,MSE_A, CI_A]
+        df[mod_b_distinct_method] = [model_b.aic, model_b.bic, model_b.rsquared_adj,MSE_B, CI_B]
+
+        ExploratoryDataAnalysis.to_pretty_table(self,dat=df,
+                             title='Dimensionality Reduction Metric Comparison',
+                             head=None)
 
         return df, figs,df_predictions_set
 
@@ -1031,17 +1070,25 @@ class ClassificationAnalysis:
         pass
 
     @staticmethod
-    def to_one_vs_all(model,x_train, y_train,fit):
+    def to_one_vs_all(model,x_train, y_train,fit,deep = None):
         model_ova = OneVsRestClassifier(model)
         if fit:
             model_ova = model_ova.fit(x_train, y_train)
+            if deep is not None:
+                model_ova.fit(x_train, y_train, epochs=10,
+                          batch_size=2000,
+                          validation_split=0.2)
         return model_ova
 
     @staticmethod
-    def to_one_vs_one(model,x_train, y_train,fit):
+    def to_one_vs_one(model,x_train, y_train,fit,deep = None):
         model_ovo = OneVsOneClassifier(model)
         if fit:
             model_ovo = model_ovo.fit(x_train, y_train)
+            if deep is not None:
+                model_ovo.fit(x_train, y_train, epochs=10,
+                          batch_size=2000,
+                          validation_split=0.2)
         return model_ovo
 
     @staticmethod
@@ -1050,6 +1097,65 @@ class ClassificationAnalysis:
         if fit:
             dtf = dtf.fit(x_train, y_train)
         return dtf
+
+    @staticmethod
+    def get_naive_bayes(x_train, y_train,fit):
+        gnb = GaussianNB()
+        if fit:
+            gnb = gnb.fit(x_train, y_train)
+        return gnb
+
+    @staticmethod
+    def get_SVM(x_train, y_train,fit):
+        svc = SVC()
+        if fit:
+            svc = svc.fit(x_train, y_train)
+        return svc
+
+    @staticmethod
+    def get_neural_network(x_train, y_train,fit):
+        from tensorflow.keras import Sequential
+        from tensorflow.keras.layers import Dense
+        from tensorflow.keras.layers import Flatten
+        model = Sequential([
+
+            # reshape 28 row * 28 column data to 28*28 rows
+            Flatten(input_shape=(28, 28)),
+
+            # dense layer 1
+            Dense(256, activation='sigmoid'),
+
+            # dense layer 2
+            Dense(128, activation='sigmoid'),
+
+            # output layer
+            Dense(10, activation='sigmoid'),
+        ])
+        model.compile(optimizer='adam',
+                      loss='sparse_categorical_crossentropy',
+                      metrics=['accuracy'])
+        if fit:
+            model.fit(x_train, y_train, epochs=10,
+                      batch_size=2000,
+                      validation_split=0.2)
+        return model
+
+
+
+    @staticmethod
+    def get_KNN(x_train, y_train,fit):
+        knn = KNeighborsClassifier()
+
+        k_range = list(range(1, 31))
+        param_grid = dict(n_neighbors=k_range)
+        grid = GridSearchCV(knn, param_grid, cv=10, scoring='accuracy', return_train_score=True, verbose=0)
+        grid_search = grid.fit(x_train, y_train)
+        knn = KNeighborsClassifier(n_neighbors= grid_search.best_params_)
+
+        if fit:
+            knn = knn.fit(x_train, y_train)
+        return knn
+
 
     @staticmethod
     def get_random_forest_classifier(x_train, y_train,fit):
@@ -1068,10 +1174,11 @@ class ClassificationAnalysis:
             clf = clf.fit(x_train, y_train)
         return clf
     @staticmethod
-    def roc_auc_score_multiclass(actual_class, pred_class, average="macro"):
+    def roc_auc_score_multiclass(model,actual_class, pred_class, average="macro"):
         # creating a set of all the unique classes using the actual class list
         unique_class = set(actual_class)
         roc_auc_dict = {}
+        roc_data = {}
         for per_class in unique_class:
             # creating a list of all the classes except the current class
             other_class = [x for x in unique_class if x != per_class]
@@ -1082,13 +1189,25 @@ class ClassificationAnalysis:
 
             # using the sklearn metrics method to calculate the roc_auc_score
             roc_auc = roc_auc_score(new_actual_class, new_pred_class, average=average)
+            # from sklearn.metrics import RocCurveDisplay
+            # RocCurveDisplay.from_predictions(new_actual_class, new_pred_class)
+            # plt.show()
+
+
+            roc_auc = roc_auc_score(new_actual_class, new_pred_class,
+                                    multi_class='ova', labels=np.unique(actual_class))
+
+
+            # from sklearn.metrics import roc_curve, auc
+            fpr, tpr, threshold = roc_curve(new_actual_class, new_pred_class)
+            roc_data[per_class] = [fpr, tpr, threshold]
             roc_auc_dict[per_class] = roc_auc
 
-        return roc_auc_dict
+        return roc_auc_dict,roc_data
 
 
     @staticmethod
-    def show_classification_models( models, methods, results,x_test,y_test, show,average):
+    def show_classification_models( models, methods, results,x_train, y_train,x_test,y_test, show,average,target_labels):
 
         fig = None
         fig2 = None
@@ -1096,15 +1215,22 @@ class ClassificationAnalysis:
         if show is None:
             show = False
 
-        df = pd.DataFrame()
-        df['Classifier Metrics:'] = ['Accuracy (maximize)('+ average+')', 'Precision (maximize)('+ average+')',
+        df_ovo = pd.DataFrame()
+        df_ovo['Classifier Metrics:'] = ['Accuracy (maximize)('+ average+')', 'Precision (maximize)('+ average+')',
                                      'Recall (maximize)('+ average+')',
-                                     'F-Score (maximize)('+ average+')']
+                                     'F-Score (maximize)('+ average+')',
+                                     'Specificity (maximize)('+ average+')']
+
+        df_ova = pd.DataFrame()
+        df_ova['Classifier Metrics:'] = ['Accuracy (maximize)('+ average+')', 'Precision (maximize)('+ average+')',
+                                     'Recall (maximize)('+ average+')',
+                                     'F-Score (maximize)('+ average+')',
+                                     'Specificity (maximize)('+ average+')']
 
         traces = []
         c = 0
         fig = go.Figure()
-        figure = []
+        figs = []
         for mod, meth, res in zip(models, methods, results):
             c += 1
             pred_name = res.columns[np.where(np.array([i.find('Predicted') for i in res.columns]) == 0)]
@@ -1114,27 +1240,47 @@ class ClassificationAnalysis:
 
 
             # Evaluate the performance of the model
-            precision, recall, f_score, _ = precision_recall_fscore_support(Y, y_hat,average=average)
+            precision, recall, f_score, _ = precision_recall_fscore_support(Y, y_hat,average=average,zero_division=0)
+            sensitivity = recall_score(Y, y_hat, pos_label=0,average=average)
             accuracy = accuracy_score(Y, y_hat)
-            df[meth] = [accuracy,precision, recall, f_score]
+            if '(One vs. One)' in meth:
+                df_ovo[meth] = [accuracy, precision, recall, f_score,sensitivity]
+
+            elif'(One vs. All)' in meth:
+                df_ova[meth] = [accuracy, precision, recall, f_score,sensitivity]
+
+
             cnf_matrix = confusion_matrix(Y, y_hat)
-            cnf_matrix = pd.DataFrame(cnf_matrix,columns = np.unique(y_hat))
-            roc_auc_dict = ClassificationAnalysis().roc_auc_score_multiclass(Y, y_hat,average = average)
+            if list(np.unique(Y)) == list(np.unique(y_hat)):
+                target_labels = np.unique(Y)
+            cnf_matrix = pd.DataFrame(cnf_matrix,columns = target_labels)
 
+            roc_auc_dict,roc_data = ClassificationAnalysis().roc_auc_score_multiclass(mod,Y, y_hat,average = average)
+            traces = []
             if show:
-
-                cr = classification_report(Y, y_hat)
+                print(meth)
+                print(classification_report(Y, y_hat))
 
                 # Plot ROC curve
-                # traces.append(go.Scatter(x=fpr, y=tpr, mode='lines', name=meth + ' (AUC = %0.2f)' % roc_auc))
+                for label,roc in roc_data.items():
+                    auc = roc_auc_dict[label]
+                    traces.append(go.Scatter(x=roc[0], y=roc[1], mode='lines',
+                                             name=label + ' (AUC = %0.2f)' % auc))
 
+                fig = go.Figure(data=traces)
+                fig.update_layout(xaxis_title='<b>False Positive Rate<b>', yaxis_title='<b>True Positive Rate<b>',
+                                  title='<b> '+meth+' Receiver Operating Characteristic (ROC) curve<b>')
+                fig.update_yaxes(tickfont_family="Arial Black")
+                fig.update_xaxes(tickfont_family="Arial Black")
+                fig.update_layout(template="plotly_dark", font=dict(size=18))
+                fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
-                labs = np.unique(y_hat)
                 import plotly.figure_factory as ff
                 z_text = [[str(y) for y in x] for x in cnf_matrix]
+
                 fig2 = ff.create_annotated_heatmap(cnf_matrix[::-1].values,
-                                                  x=['(predicted) '+ lab for lab in labs],
-                                                  y=['(actual) '+ lab for lab in np.flip(labs)],
+                                                  x=[lab for lab in target_labels],
+                                                  y=[lab for lab in np.flip(target_labels)],
                                                   # annotation_text=str(cnf_matrix.values),
                                                   colorscale='YlGnBu')
                 fig2['data'][0]['showscale'] = True
@@ -1143,45 +1289,29 @@ class ClassificationAnalysis:
                                    )
                 fig2.update_yaxes(tickfont_family="Arial Black")
                 fig2.update_xaxes(tickfont_family="Arial Black",side="bottom")
-                fig.update_layout(xaxis_title='<b>Predicted label<b>',
+                fig2.update_layout(xaxis_title='<b>Predicted label<b>',
                                   yaxis_title='<b>Actual label<b>')
                 fig2.update_layout(template="plotly_dark",font=dict(size=18))
                 fig2.update_yaxes(scaleanchor="x", scaleratio=1)
-                # add custom xaxis title
-                # fig2.show()
-                # import seaborn as sns
-                # sns.heatmap(cnf_matrix, annot=True, cmap="YlGnBu", fmt='g',
-                #             xticklabels=np.unique(y_hat),
-                #             yticklabels=np.unique(y_hat))
-                # plt.ylabel('Actual label')
-                # plt.xlabel('Predicted label')
-                # plt.tight_layout()
-                # plt.show()
 
-                # # Plot the perfomance
-                # f = px.bar(df, x=meth, y='Classifier Metrics:')
-                # f.update_yaxes(tickfont_family="Arial Black")
-                # f.update_xaxes(tickfont_family="Arial Black")
-                # f.show()
+            fig.add_shape(name='chance level (AUC = 0.5)',
+                type='line', line=dict(dash='dash'),
+                x0=0, x1=1, y0=0, y1=1
+            )
+            figs.append(fig)
+            figs.append(fig2)
 
-        if show:
-            fig = go.Figure(data=traces)
-            fig.update_layout(xaxis_title='<b>False Positive Rate<b>', yaxis_title='<b>True Positive Rate<b>',
-                              title='<b>Receiver Operating Characteristic (ROC) curve<b>')
-            fig.update_yaxes(tickfont_family="Arial Black")
-            fig.update_xaxes(tickfont_family="Arial Black")
-            fig.update_layout(template="plotly_dark",font=dict(size=18))
 
-        ExploratoryDataAnalysis().to_pretty_table(dat=df,
-                                                title='Classifier Model Predictor Comparison',
-                                                head=None)
+        ExploratoryDataAnalysis().to_pretty_table(dat=df_ovo,
+                                                  title='(O v. O) Classifier Performance Comparison',
+                                                  head=None)
+        ExploratoryDataAnalysis().to_pretty_table(dat=df_ova,
+                                                  title='(O v. A) Classifier Performance Comparison',
+                                                  head=None)
 
-        best_wrt_maximize_predictors = df.iloc[0:-1, 1:].idxmax(axis=1)[0]
-        ind = int(np.where(np.array([i.find(best_wrt_maximize_predictors) for i in df.columns]) == 0)[0])
-        rec_model = models[ind - 1]
-        rec_res = results[ind - 1]
 
-        return df, rec_model, rec_res,fig,fig2
+
+        return df_ovo,df_ova, figs
 
     @staticmethod
     def predict_fitted_model(fitted_model, x_test, y_test, compute_prediction,
@@ -1390,18 +1520,9 @@ class AssociationMining:
 
     @staticmethod
     def get_associations(df,show,method ='apriori'):
-        frequent_itemsets = apriori(df, min_support=0.5, use_colnames=True)
-        rules = association_rules(frequent_itemsets, metric='lift', min_threshold=1)
+        frequent_itemsets = apriori(df, min_support=0.4, use_colnames=True)
+        rules = association_rules(frequent_itemsets, metric='confidence', min_threshold=.7)
         if show:
-            # fig = go.Figure(data=[go.Scatter(x=rules['support'], y=rules['lift'],
-            #                                  mode='markers', text=rules['antecedents'])])
-            # fig.update_layout(title='<b>Association Rules Scatter Plot<b>',
-            #                   xaxis_title='<b>Support<b>',
-            #                   yaxis_title='<b>Lift<b>')
-            # fig.update_yaxes(tickfont_family="Arial Black")
-            # fig.update_xaxes(tickfont_family="Arial Black")
-            # fig.update_layout(template="plotly_dark",font=dict(size=18))
-
             def change_to_list(x):
                 return list(x)
 
@@ -1412,4 +1533,36 @@ class AssociationMining:
             eda.to_pretty_table(rules,title='Apriori Association Analysis',head=None)
 
         return rules
+
+    @staticmethod
+    def get_k_mean_clusters(df,n_clusters):
+        from sklearn.cluster import KMeans
+        kmeans = KMeans(n_clusters=n_clusters)
+
+        kmeans.fit(df)
+
+        labels = kmeans.labels_
+
+        df['label'] = labels
+
+        # Plot the clusters using Plotly
+        fig = px.scatter(df, color='label')
+        return fig
+
+
+    @staticmethod
+    def get_dbscan_clusters(X):
+        from sklearn.cluster import DBSCAN
+        # Initialize DBSCAN with eps=0.3 and min_samples=5
+        dbscan = DBSCAN(eps=0.3, min_samples=5)
+        # Fit DBSCAN to the data
+        dbscan.fit(X)
+        # Get the cluster assignments for each data point
+        labels = dbscan.labels_
+        X['label'] = labels
+
+        # Plot the clusters using Plotly
+        fig = px.scatter(X, color='label', hover_data=['label'])
+        return fig
+
 

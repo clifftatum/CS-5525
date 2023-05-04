@@ -96,7 +96,6 @@ if __name__ == '__main__':
     df.drop(['DateTime'],axis=1,inplace=True)
     df.drop(['Unnamed: 0'], axis=1,inplace=True)
 
-    df['target_buy_sell_performance'].value_counts().plot(ylim = (0,10))
 
 
 
